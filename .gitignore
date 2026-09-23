@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-electron
+release
+
+# nunca versionar dados pessoais
+*.db
+*.db-shm
+*.db-wal
+dados/
+data/
