@@ -14,7 +14,7 @@
     "build": "npm run build:web && npm run build:electron",
     "start": "npm run build && electron .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
-    "test": "FINANCAS_DB=:memory: PATRIMONIO_DB=:memory: node --test core/ shared/",
+    "test": "cross-env FINANCAS_DB=:memory: PATRIMONIO_DB=:memory: node --test core/ shared/",
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:win": "npm run build && electron-builder --win"
   },
@@ -57,7 +57,9 @@
         "deb"
       ],
       "category": "Office",
-      "icon": "recursos/icone.png"
+      "icon": "recursos/icone.png",
+      "synopsis": "Finanças pessoais e patrimônio, tudo local",
+      "syncDesktopName": true
     },
     "win": {
       "target": [
@@ -80,5 +82,10 @@
   },
   "bugs": {
     "url": "https://github.com/jszutkoski-alt/Plataforma_financas/issues"
-  }
+  },
+  "author": {
+    "name": "jszutkoski-alt",
+    "email": "319280082+jszutkoski-alt@users.noreply.github.com"
+  },
+  "desktopName": "financas-desktop.desktop"
 }

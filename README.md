@@ -7,13 +7,43 @@ Aplicativo de computador (Linux e Windows) que reúne em uma janela duas áreas 
 
 **Tudo fica na sua máquina.** Não existe servidor, conta, nuvem ou telemetria: nenhuma porta de rede é aberta e nada é enviado para lugar nenhum. Os dados ficam em dois arquivos SQLite que você pode copiar, versionar ou abrir com qualquer ferramenta de banco de dados.
 
+![Painel do Finanças](docs/imagens/financas-painel.png)
+
+<details>
+<summary>Mais telas</summary>
+
+**Lançamentos** — filtros por período, tipo, categoria e subcategoria; edição de categoria em lote; compras parceladas marcadas com a parcela.
+
+![Lançamentos](docs/imagens/financas-lancamentos.png)
+
+**Patrimônio** — posição consolidada do mês e evolução da carteira.
+
+![Painel do Patrimônio](docs/imagens/patrimonio-painel.png)
+
+**Patrimônio por ano** — mês a mês: saldo, aportes, resultado e rentabilidade.
+
+![Anos](docs/imagens/patrimonio-anos.png)
+
+</details>
+
+> As imagens usam a base de exemplo gerada por `scripts/dados-exemplo.ts` — valores inventados.
+
 ---
 
 ## Instalação
 
-### Opção A — instaladores (recomendado para uso normal)
+### Opção A — baixar o instalador pronto
 
-Ainda não há instaladores publicados em *Releases*; por enquanto você os gera na sua máquina, com um comando. É preciso ter o [Node.js](https://nodejs.org) 22.13 ou mais novo.
+Pegue o arquivo do seu sistema na página de [**Releases**](https://github.com/jszutkoski-alt/Plataforma_financas/releases):
+
+- **Linux** — `Finanças-x.y.z.AppImage`: dê permissão de execução (`chmod +x`) e abra com dois cliques; não instala nada no sistema. Ou `financas-desktop_x.y.z_amd64.deb` em Debian/Ubuntu/Mint: `sudo apt install ./financas-desktop_*.deb`.
+- **Windows** — `Finanças Setup x.y.z.exe` (instalador) ou a versão portátil, que roda sem instalar.
+
+> Na primeira instalação no Windows o SmartScreen mostra "aplicativo não reconhecido", porque o executável não é assinado por um certificado pago. Clique em **Mais informações → Executar assim mesmo**.
+
+### Opção B — gerar os instaladores você mesmo
+
+É preciso ter o [Node.js](https://nodejs.org) 22.13 ou mais novo.
 
 ```bash
 git clone https://github.com/jszutkoski-alt/Plataforma_financas.git
@@ -36,11 +66,16 @@ npm run dist:linux
 npm run dist:win
 ```
 
-Esse comando precisa rodar **no Windows** (ou em CI com runner Windows); gerar o instalador do Windows a partir do Linux depende de Wine e costuma falhar.
+Esse comando precisa rodar **no Windows**; gerar o instalador do Windows a partir do Linux depende de Wine e costuma falhar. O jeito prático é deixar o GitHub Actions fazer isso: o workflow [`.github/workflows/instaladores.yml`](.github/workflows/instaladores.yml) monta os três pacotes (AppImage, `.deb` e `.exe`) a cada tag `v*`, anexando-os à Release — e também pode ser disparado à mão em **Actions → Instaladores → Run workflow**.
 
-> Na primeira instalação no Windows o SmartScreen mostra "aplicativo não reconhecido", porque o executável não é assinado por um certificado pago. Clique em **Mais informações → Executar assim mesmo**.
+Para publicar uma nova versão:
 
-### Opção B — rodar direto do código
+```bash
+npm version patch          # ou minor / major
+git push --follow-tags     # a tag dispara o workflow
+```
+
+### Opção C — rodar direto do código
 
 Útil para experimentar ou desenvolver:
 
@@ -68,8 +103,8 @@ Meses sem dados aparecem em branco: o programa não estima nem preenche valores 
 
 | Sistema | Pasta |
 |---|---|
-| Linux | `~/.config/financas-desktop/dados/` |
-| Windows | `%APPDATA%\financas-desktop\dados\` |
+| Linux | `~/.config/Finanças/dados/` |
+| Windows | `%APPDATA%\Finanças\dados\` |
 
 Dentro dela: `financas.db`, `patrimonio.db` e `backups/`.
 
@@ -113,6 +148,16 @@ npm run build      # compila interface (dist/) e processo principal (dist-electr
 ```
 
 Os testes usam bancos em memória e dados inventados — nenhum dado real é necessário para rodá-los.
+
+Para experimentar o aplicativo com uma base cheia (a mesma das capturas acima), gere dados fictícios em uma pasta separada:
+
+```bash
+mkdir -p /tmp/demo/dados
+FINANCAS_DB=/tmp/demo/dados/financas.db PATRIMONIO_DB=/tmp/demo/dados/patrimonio.db node scripts/dados-exemplo.ts
+npm run build && npx electron . --user-data-dir=/tmp/demo
+```
+
+O `--user-data-dir` faz o aplicativo usar esse perfil separado: seus dados de verdade não são tocados.
 
 ---
 

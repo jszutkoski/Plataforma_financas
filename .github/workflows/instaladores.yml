@@ -1,0 +1,67 @@
+name: Instaladores
+
+# Gera os instaladores para Linux e Windows. Roda ao publicar uma tag "v*"
+# (anexando os arquivos à Release) e também sob demanda, pelo botão "Run workflow".
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            nome: linux
+            comando: npm run dist:linux
+            artefatos: |
+              release/*.AppImage
+              release/*.deb
+          - os: windows-latest
+            nome: windows
+            comando: npm run dist:win
+            artefatos: |
+              release/*.exe
+
+    name: ${{ matrix.nome }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Verificar tipos e testes
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Gerar instaladores
+        run: ${{ matrix.comando }}
+        env:
+          # sem certificado de assinatura: o electron-builder não deve tentar assinar
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Guardar artefatos
+        uses: actions/upload-artifact@v4
+        with:
+          name: instaladores-${{ matrix.nome }}
+          path: ${{ matrix.artefatos }}
+          if-no-files-found: error
+
+      - name: Anexar à Release (somente em tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artefatos }}
+          fail_on_unmatched_files: false
