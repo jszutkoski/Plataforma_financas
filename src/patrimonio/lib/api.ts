@@ -10,7 +10,7 @@ export interface FechamentoCorpo {
   encerrar?: { investimentoId: string; data: string }[]; fluxo?: Partial<FluxoConsolidado> | null; motivo?: string | null
   totalCarteira?: { saldo: number | null } | null; saldosConta?: { contaId: string; saldo: number }[]; saldosDivida?: { dividaId: string; saldo: number }[]
 }
-export interface FluxoFinancas { ano: number; mes: number; investimentos: number; resgates: number; liquido: number; ids: string[]; novos: number; itens: { id: string; data: string; tipo: string; valor: number; descricao: string; subcategoria: string | null; conta: string | null }[] }
+export interface FluxoFinancas { ano: number; mes: number; investimentos: number; resgates: number; liquido: number; ids: string[]; novos: number; desatualizado?: boolean; itens: { id: string; data: string; tipo: string; valor: number; descricao: string; subcategoria: string | null; conta: string | null }[] }
 export interface ResultadoImportacao { [tabela: string]: { criados: number; ignorados: number; rejeitados: { indice: number; erros: string[] }[] } }
 
 export const api = {

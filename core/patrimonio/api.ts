@@ -37,10 +37,33 @@ export function listarTabela({ t }: { t: string }) {
   return listar(n!)
 }
 
+/** O histórico de alterações é a trilha de auditoria: só o próprio app escreve nele. */
+const somenteLeitura = (n: NomeTabela) => { if (n === 'alteracoes') erro('O histórico de alterações não pode ser editado.') }
+
+/** Referências a outros registros (ativo, conta, dívida, bem) precisam existir. */
+const REFERENCIAS: Partial<Record<NomeTabela, [string, NomeTabela, boolean][]>> = {
+  posicoes: [['investimentoId', 'investimentos', true]],
+  movimentacoes: [['investimentoId', 'investimentos', false], ['contaId', 'contas', false]],
+  saldosConta: [['contaId', 'contas', true]],
+  saldosDivida: [['dividaId', 'dividas', true]],
+  avaliacoesBem: [['bemId', 'bens', true]],
+  bens: [['dividaId', 'dividas', false]],
+  dividas: [['bemId', 'bens', false]],
+}
+function validarComReferencias(n: NomeTabela, item: Obj): string[] {
+  const e = validar(n, item)
+  for (const [campo, alvo] of REFERENCIAS[n] ?? []) {
+    const v = item[campo]
+    if (v != null && v !== '' && !obter(alvo, String(v))) e.push(`${campo}: registro "${String(v)}" não existe.`)
+  }
+  return e
+}
+
 export function criar({ t, item: bruto }: { t: string; item: Obj }) {
   const n = tabela(t); if (!n) erro('Tabela desconhecida.')
+  somenteLeitura(n!)
   const item = normalizar(n!, bruto)
-  const erros = validar(n!, item)
+  const erros = validarComReferencias(n!, item)
   if (erros.length) errosDeValidacao(erros)
   try {
     return salvar(n!, { ...item, id: item.id || newId(prefixo(n!)) })
@@ -52,9 +75,10 @@ export function atualizar({ t, id, item: corpoBruto }: { t: string; id: string; 
   const n = tabela(t); if (!n) erro('Tabela desconhecida.')
   const atual = obter<Obj>(n!, id)
   if (!atual) erro('Registro não encontrado.')
+  somenteLeitura(n!)
   const { motivo, ...corpo } = corpoBruto
   const item = normalizar(n!, { ...atual, ...corpo, id })
-  const erros = validar(n!, item)
+  const erros = validarComReferencias(n!, item)
   if (erros.length) errosDeValidacao(erros)
   try {
     return transacao(() => {
@@ -81,6 +105,7 @@ function removerLancamentoDoFinancas(m: Movimentacao) {
 
 export function remover({ t, id, motivo }: { t: string; id: string; motivo?: string }) {
   const n = tabela(t); if (!n) erro('Tabela desconhecida.')
+  somenteLeitura(n!)
   const atual = obter<Obj>(n!, id)
   if (!atual) erro('Registro não encontrado.')
   transacao(() => {
@@ -156,7 +181,7 @@ export function fechamento(c: FechamentoCorpo) {
           if (ex && ex.situacao === 'pendente') excluir('posicoes', ex.id)
           continue
         }
-        const e = validar('posicoes', it); if (e.length) { erros.push(...e); continue }
+        const e = validarComReferencias('posicoes', it); if (e.length) { erros.push(...e); continue }
         const ex = obter<Posicao>('posicoes', it.id as string)
         if (ex && anterior?.status === 'confirmado' && (ex.saldo !== it.saldo || ex.quantidade !== it.quantidade))
           registrarAlteracao({ entidade: 'posicoes', entidadeId: ex.id, descricao: 'Correção de posição em mês já confirmado', antes: ex, depois: it, motivo: c.motivo ?? null, periodosAfetados: [chaveMes(c.ano, c.mes)] })
@@ -165,7 +190,7 @@ export function fechamento(c: FechamentoCorpo) {
       for (const id of c.excluirMovimentacoes ?? []) { const m = obter<Movimentacao>('movimentacoes', id); if (m) removerLancamentoDoFinancas(m); excluir('movimentacoes', id) }
       for (const m of c.movimentacoes) {
         const it = normalizar('movimentacoes', { ...m, id: m.id || newId('mov'), origem: m.origem ?? 'manual' })
-        const e = validar('movimentacoes', it); if (e.length) { erros.push(...e); continue }
+        const e = validarComReferencias('movimentacoes', it); if (e.length) { erros.push(...e); continue }
         salvar('movimentacoes', it); nMov++
       }
       for (const enc of c.encerrar ?? []) {
@@ -195,13 +220,13 @@ export function fechamento(c: FechamentoCorpo) {
       }
       for (const s of c.saldosConta ?? []) {
         const it = normalizar('saldosConta', { contaId: s.contaId, ano: c.ano, mes: c.mes, data: fim, saldo: s.saldo, situacao, origem: 'manual' })
-        const e = validar('saldosConta', it); if (e.length) { erros.push(...e); continue }
+        const e = validarComReferencias('saldosConta', it); if (e.length) { erros.push(...e); continue }
         salvar('saldosConta', it)
       }
       for (const s of c.saldosDivida ?? []) {
         const ex = listar<Obj>('saldosDivida', 'divida_id = ? AND ano = ? AND mes = ?', [s.dividaId, c.ano, c.mes])[0]
         const it = normalizar('saldosDivida', { ...(ex ?? { dividaId: s.dividaId, data: fim, origem: 'manual' }), saldoDevedor: s.saldo })
-        const e = validar('saldosDivida', it); if (e.length) { erros.push(...e); continue }
+        const e = validarComReferencias('saldosDivida', it); if (e.length) { erros.push(...e); continue }
         salvar('saldosDivida', it)
       }
       // qualquer linha inválida desfaz o fechamento inteiro: nada fica gravado pela metade
@@ -223,7 +248,7 @@ export function importar({ origemArquivo, itens }: { origemArquivo: string; iten
       const r = { criados: 0, ignorados: 0, rejeitados: [] as { indice: number; erros: string[] }[] }
       lista.forEach((raw, i) => {
         const it = normalizar(t, { ...raw, origemArquivo: raw.origemArquivo ?? origemArquivo, origem: raw.origem ?? `importação: ${origemArquivo}` })
-        const e = validar(t, it); if (e.length) { r.rejeitados.push({ indice: i, erros: e }); return }
+        const e = validarComReferencias(t, it); if (e.length) { r.rejeitados.push({ indice: i, erros: e }); return }
         if (it.id && obter(t, it.id as string)) { r.ignorados++; return }
         if (it.origem && it.origemArquivo && db.prepare(`SELECT 1 FROM ${TABELAS[t].nome} WHERE origem = ? AND origem_arquivo = ?`).get(it.origem as string, it.origemArquivo as string)) { r.ignorados++; return }
         salvar(t, { ...it, id: it.id || newId(prefixo(t)) }); r.criados++
@@ -271,9 +296,21 @@ export function financasFluxos() {
     m.itens.push({ id: r.id, data: r.data, tipo: r.tipo, valor: r.valor, descricao: r.descricao, subcategoria: r.subcategoria, conta: r.conta })
     meses.set(k, m)
   }
-  const jaImportados = new Set(listar<FluxoConsolidado>('fluxosConsolidados').flatMap((x) => x.financasIds))
+  const fluxos = listar<FluxoConsolidado>('fluxosConsolidados')
+  const jaImportados = new Set(fluxos.flatMap((x) => x.financasIds))
   const movsLigadas = new Set(listar<Movimentacao>('movimentacoes').map((m) => m.financasId).filter(Boolean))
-  return { disponivel: true, caminho: FINANCAS_DB, meses: [...meses.values()].map((m) => ({ ...m, novos: m.ids.filter((id) => !jaImportados.has(id) && !movsLigadas.has(id)).length })) }
+  // um mês importado do Finanças cujos lançamentos foram todos excluídos lá continua na lista (agora com líquido 0)
+  for (const f of fluxos) {
+    const k = chaveMes(f.ano, f.mes)
+    if (f.origem?.startsWith('financas') && !meses.has(k)) meses.set(k, { ano: f.ano, mes: f.mes, investimentos: 0, resgates: 0, liquido: 0, ids: [], itens: [] })
+  }
+  const lista = [...meses.values()].sort((a, b) => chaveMes(a.ano, a.mes).localeCompare(chaveMes(b.ano, b.mes))).map((m) => {
+    const f = fluxos.find((x) => x.ano === m.ano && x.mes === m.mes)
+    // importado do Finanças, mas os lançamentos de lá mudaram depois (valor editado, lançamento novo ou excluído)
+    const desatualizado = !!f?.origem?.startsWith('financas') && (Math.abs((f.aportesLiquidos ?? 0) - m.liquido) > 0.005 || f.financasIds.length !== m.ids.length || f.financasIds.some((id) => !m.ids.includes(id)))
+    return { ...m, novos: m.ids.filter((id) => !jaImportados.has(id) && !movsLigadas.has(id)).length, desatualizado }
+  })
+  return { disponivel: true, caminho: FINANCAS_DB, meses: lista }
 }
 
 /** Cria/atualiza o fluxo consolidado de um mês a partir dos lançamentos do Finanças (guarda os ids para não repetir). */

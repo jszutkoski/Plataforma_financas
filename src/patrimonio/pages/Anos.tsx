@@ -53,7 +53,7 @@ export function Anos() {
         <div className="card p-4 min-w-0"><div className="text-xs text-ink-2">Rentabilidade no ano</div><div className="text-lg font-semibold mt-1 tnum">{ra.rentabilidade != null ? fmtPct2(ra.rentabilidade) : <span className="text-sm text-muted">dados insuficientes</span>}</div><div className="text-xs text-muted mt-0.5">{ra.rentabilidade != null ? 'meses encadeados (não somados)' : `${ra.mesesComResultado}/12 meses com resultado`}</div></div>
       </div>
 
-      <Card title={`Meses de ${ano}`} subtitle="Saldo no fechamento, fluxos e resultado apurado de cada mês. Clique num mês para ver os ativos.">
+      <Card title={`Meses de ${ano}`} subtitle="Saldo no fechamento, fluxos e resultado apurado de cada mês. Rentabilidade do mês = resultado ÷ (saldo inicial + aporte), como se o aporte entrasse no início do mês — com aportes grandes no fim do mês, ela sai menor que a real. Clique num mês para ver os ativos.">
         <ul className="sm:hidden divide-y" style={{ borderColor: 'var(--border)' }}>
           {ra.meses.map((m) => (
             <li key={m.mes} className={`py-2 ${m.mes === mes ? 'bg-renda/10 -mx-2 px-2 rounded' : ''}`} onClick={() => irPara(ano, m.mes)}>

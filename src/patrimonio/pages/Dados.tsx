@@ -63,9 +63,9 @@ export function Dados() {
         {fluxos?.disponivel && fluxos.meses.length > 0 && (
           <div className="overflow-x-auto max-h-80 overflow-y-auto"><table className="data text-xs whitespace-nowrap">
             <thead><tr><th>Mês</th><th className="text-right">Investimentos</th><th className="text-right">Resgates</th><th className="text-right">Líquido</th><th className="text-right">No Patrimônio</th><th>Situação</th><th></th></tr></thead>
-            <tbody>{[...fluxos.meses].reverse().map((m) => { const f = base.fluxosConsolidados.find((x) => x.ano === m.ano && x.mes === m.mes); const igual = f?.aportesLiquidos != null && Math.abs(f.aportesLiquidos - m.liquido) < 0.005; return (
+            <tbody>{[...fluxos.meses].reverse().map((m) => { const f = base.fluxosConsolidados.find((x) => x.ano === m.ano && x.mes === m.mes); const igual = f?.aportesLiquidos != null && Math.abs(f.aportesLiquidos - m.liquido) < 0.005 && !m.desatualizado; return (
               <tr key={`${m.ano}-${m.mes}`}><td>{fmtMesAno(m.ano, m.mes)}</td><td className="text-right"><Valor v={m.investimentos} /></td><td className="text-right"><Valor v={m.resgates} /></td><td className="text-right"><Valor v={m.liquido} sinal /></td><td className="text-right"><Valor v={f?.aportesLiquidos} vazio="—" /></td>
-                <td>{!f ? <span className="text-muted">não importado</span> : igual ? <span className="tag-ok">confere{f.origem?.startsWith('financas') ? ' (importado)' : ''}</span> : <span className="tag-warn">valor diferente do registrado</span>}</td>
+                <td>{!f ? <span className="text-muted">não importado</span> : igual ? <span className="tag-ok">confere{f.origem?.startsWith('financas') ? ' (importado)' : ''}</span> : <span className="tag-warn">{m.desatualizado ? 'lançamentos do Finanças mudaram depois da importação' : 'valor diferente do registrado'}</span>}</td>
                 <td className="text-right">{(!f || !igual) && <button className="btn-ghost !py-0.5 !px-2" onClick={() => importarFluxo(m)}>Importar</button>}</td></tr>) })}</tbody>
           </table></div>
         )}

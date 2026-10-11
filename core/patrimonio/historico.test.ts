@@ -75,3 +75,36 @@ test('PAT-006/007: registrar no Finanças só uma vez; excluir a movimentação 
   api.remover({ t: 'movimentacoes', id: m.id })
   assert.equal(fin.lancamentos().length, antes, 'o aporte criado pela movimentação saiu junto')
 })
+
+test('PAT-013: o histórico de alterações não pode ser editado nem apagado', () => {
+  limpar()
+  assert.throws(() => api.criar({ t: 'alteracoes', item: { entidade: 'x', entidadeId: 'y', descricao: 'forjada' } }), /não pode ser editado/)
+  const inv = api.criar({ t: 'investimentos', item: { nome: 'CDB', categoria: 'RendaFixa', situacao: 'ativo' } }) as { id: string }
+  api.remover({ t: 'investimentos', id: inv.id })
+  const [alt] = listar<{ id: string }>('alteracoes')
+  assert.throws(() => api.remover({ t: 'alteracoes', id: alt.id }), /não pode ser editado/)
+  assert.throws(() => api.atualizar({ t: 'alteracoes', id: alt.id, item: { descricao: 'x' } }), /não pode ser editado/)
+})
+
+test('PAT-014: posição, saldo ou movimentação apontando para registro inexistente é recusada', () => {
+  limpar()
+  assert.throws(() => api.criar({ t: 'posicoes', item: { investimentoId: 'inv-que-nao-existe', ano: 2026, mes: 1, saldo: 10, situacao: 'confirmada' } }), /não existe/)
+  assert.throws(() => api.criar({ t: 'saldosConta', item: { contaId: 'cta-x', ano: 2026, mes: 1, saldo: 10 } }), /não existe/)
+  const r = api.importar({ origemArquivo: 't.csv', itens: { movimentacoes: [{ investimentoId: 'inv-x', tipo: 'aplicacao', data: '2026-01-05', valor: 10 }] } })
+  assert.equal(r.movimentacoes.rejeitados.length, 1)
+})
+
+test('PAT-011: aporte importado do Finanças aparece como desatualizado quando os lançamentos de lá mudam', () => {
+  limpar()
+  const base = { data: '2026-04-10', descricao: 'Aporte', tipo: 'investimento' as const, valor: 1000, grupo: null, categoria: 'Investimentos', subcategoria: null, conta: null, formaPagamento: null, parcela: null, totalParcelas: null, observacoes: null, origem: null, origemArquivo: null, diaConhecido: true, foraDoFluxo: false, ledger: null, recorrenciaId: null }
+  const l = fin.criarLancamento(base)
+  api.financasImportarFluxo({ ano: 2026, mes: 4 })
+  const mes = () => api.financasFluxos().meses.find((m) => m.ano === 2026 && m.mes === 4)
+  assert.equal(mes()?.desatualizado, false)
+  fin.atualizarLanc({ id: l.id, input: { ...base, valor: 1200 } })
+  assert.equal(mes()?.desatualizado, true, 'valor editado no Finanças')
+  api.financasImportarFluxo({ ano: 2026, mes: 4 })
+  assert.equal(mes()?.desatualizado, false)
+  fin.excluirLancamento({ id: l.id })
+  assert.equal(mes()?.desatualizado, true, 'lançamento excluído no Finanças: o mês continua na lista')
+})
