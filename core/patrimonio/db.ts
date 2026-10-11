@@ -112,9 +112,22 @@ export function excluir(nome: NomeTabela, id: string): boolean {
 export function contar(nome: NomeTabela): number {
   return Number((db.prepare(`SELECT COUNT(*) AS n FROM ${TABELAS[nome].nome}`).get() as Row).n)
 }
+/** Cópia consistente do banco em `backups/` (VACUUM INTO). Devolve o caminho, ou null para banco em memória. */
+export function copiaDeSeguranca(motivo: string): string | null {
+  if (DB_PATH === ':memory:') return null
+  const dir = path.join(DATA_DIR, 'backups')
+  fs.mkdirSync(dir, { recursive: true })
+  const dest = path.join(dir, `patrimonio-${motivo}-${new Date().toISOString().replace(/[:.]/g, '-')}.db`)
+  db.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`)
+  return dest
+}
+let emTransacao = false
+/** Executa `fn` numa transação (confirma ou desfaz tudo). Chamadas aninhadas participam da transação externa. */
 export function transacao<T>(fn: () => T): T {
+  if (emTransacao) return fn()
   db.exec('BEGIN')
-  try { const r = fn(); db.exec('COMMIT'); return r } catch (e) { db.exec('ROLLBACK'); throw e }
+  emTransacao = true
+  try { const r = fn(); db.exec('COMMIT'); return r } catch (e) { db.exec('ROLLBACK'); throw e } finally { emTransacao = false }
 }
 export function getMeta(chave: string): string | null {
   const r = db.prepare('SELECT valor FROM meta WHERE chave = ?').get(chave) as Row | undefined

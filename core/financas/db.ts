@@ -13,6 +13,38 @@ fs.mkdirSync(DATA_DIR, { recursive: true })
 export const db = new DatabaseSync(DB_PATH)
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
 
+let emTransacao = false
+/**
+ * Executa `fn` numa transação: confirma no fim ou desfaz tudo se algo falhar. Nunca deixa a conexão
+ * presa numa transação aberta (o que faria as gravações seguintes se perderem ao fechar o app).
+ * Chamadas aninhadas participam da transação externa.
+ */
+export function transacao<T>(fn: () => T): T {
+  if (emTransacao) return fn()
+  db.exec('BEGIN')
+  emTransacao = true
+  try {
+    const r = fn()
+    db.exec('COMMIT')
+    return r
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  } finally {
+    emTransacao = false
+  }
+}
+
+/** Cópia consistente do banco em `backups/` (VACUUM INTO). Devolve o caminho, ou null para banco em memória. */
+export function copiaDeSeguranca(motivo: string): string | null {
+  if (DB_PATH === ':memory:') return null
+  const dir = path.join(DATA_DIR, 'backups')
+  fs.mkdirSync(dir, { recursive: true })
+  const dest = path.join(dir, `financas-${motivo}-${new Date().toISOString().replace(/[:.]/g, '-')}.db`)
+  db.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`)
+  return dest
+}
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS lancamentos (
   id TEXT PRIMARY KEY,
@@ -220,8 +252,7 @@ export function gerarParcelamento(base: LancamentoInput, valorTotal: number, tot
   const porParcela = Math.floor(centavos / totalParcelas)
   const resto = centavos - porParcela * totalParcelas
   const [y, m, d] = dataInicio.split('-').map(Number)
-  db.exec('BEGIN')
-  try {
+  transacao(() => {
     if (parcelamentoId) db.prepare('DELETE FROM lancamentos WHERE parcelamento_id = ?').run(parcelamentoId)
     for (let p = 1; p <= totalParcelas; p++) {
       const dt = new Date(y, m - 1 + (p - 1), 1)
@@ -230,11 +261,7 @@ export function gerarParcelamento(base: LancamentoInput, valorTotal: number, tot
       const valor = (porParcela + (p === totalParcelas ? resto : 0)) / 100
       inserirLancamento({ ...base, id: undefined, data, ano: undefined, mes: undefined, valor, parcela: p, totalParcelas, parcelamentoId: pid, origem: base.origem ?? 'manual' })
     }
-    db.exec('COMMIT')
-  } catch (e) {
-    db.exec('ROLLBACK')
-    throw e
-  }
+  })
   return { parcelamentoId: pid, criados: totalParcelas }
 }
 
@@ -318,17 +345,12 @@ export function prepararBancoNovo(): { categorias: number } {
   const n = (db.prepare('SELECT COUNT(*) AS n FROM categorias').get() as Row).n as number
   if (n > 0) return { categorias: 0 }
   let criadas = 0
-  db.exec('BEGIN')
-  try {
+  transacao(() => {
     for (const c of CATEGORIAS_PADRAO) {
       garantirCategoria(c.tipo, c.grupo, c.nome, null); criadas++
       for (const s of c.subs) { garantirCategoria(c.tipo, c.grupo, c.nome, s); criadas++ }
     }
     setMeta('criado_em', new Date().toISOString())
-    db.exec('COMMIT')
-  } catch (e) {
-    db.exec('ROLLBACK')
-    throw e
-  }
+  })
   return { categorias: criadas }
 }

@@ -3,12 +3,10 @@
  * A ponte com o Finanças deixou de ser rede: os dois núcleos vivem no mesmo processo.
  */
 import {
-  db, DATA_DIR, DB_PATH, TABELAS, type NomeTabela, listar, obter, salvar, excluir, contar, transacao, getMeta,
-  gerarBackup, restaurarBackup, registrarAlteracao, newId,
+  db, DB_PATH, TABELAS, type NomeTabela, listar, obter, salvar, excluir, contar, transacao, getMeta,
+  gerarBackup, restaurarBackup, registrarAlteracao, newId, copiaDeSeguranca,
 } from './db.ts'
 import { validar } from './validar.ts'
-import path from 'node:path'
-import fs from 'node:fs'
 import { erro, errosDeValidacao } from '../erros.ts'
 import * as financas from '../financas/api.ts'
 import { DB_PATH as FINANCAS_DB } from '../financas/db.ts'
@@ -193,23 +191,23 @@ export function importar({ origemArquivo, itens }: { origemArquivo: string; iten
 export const backup = () => gerarBackup()
 
 export function restaurar({ b, modo = 'substituir' }: { b: Backup; modo: 'substituir' | 'mesclar' }) {
-  try { return { ok: true as const, inseridos: restaurarBackup(b, modo) } }
+  // substituir apaga tudo: antes, guarda uma cópia do banco atual
+  const copia = modo === 'substituir' && b?.versao === 2 ? copiaDeSeguranca('antes-de-restaurar') : null
+  try { return { ok: true as const, inseridos: restaurarBackup(b, modo), copia } }
   catch (e) { return erro(String((e as Error).message)) }
 }
 
 export function backupArquivo() {
-  const dir = path.join(DATA_DIR, 'backups')
-  fs.mkdirSync(dir, { recursive: true })
-  const dest = path.join(dir, `patrimonio-${new Date().toISOString().replace(/[:.]/g, '-')}.db`)
-  db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
-  fs.copyFileSync(DB_PATH, dest)
-  return { ok: true as const, arquivo: dest }
+  const dest = copiaDeSeguranca('copia')
+  if (!dest) erro('Banco em memória: não há arquivo para copiar.')
+  return { ok: true as const, arquivo: dest! }
 }
 
 export function limpar({ confirmar }: { confirmar: string }) {
   if (confirmar !== 'APAGAR TUDO') erro('Confirmação inválida.')
+  const copia = copiaDeSeguranca('antes-de-apagar')
   transacao(() => { for (const t of Object.values(TABELAS)) db.exec(`DELETE FROM ${t.nome}`) })
-  return { ok: true as const }
+  return { ok: true as const, copia }
 }
 
 // ---------------------------------------------------------------- integração com o Finanças (mesmo processo)

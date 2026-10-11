@@ -3,14 +3,16 @@
  * chamada diretamente pelo processo principal do Electron (sem HTTP).
  */
 import {
-  db, DATA_DIR, DB_PATH, prepararBancoNovo, listarLancamentos, inserirLancamento, atualizarLancamento, validarLancamento,
+  db, DB_PATH, prepararBancoNovo, listarLancamentos, inserirLancamento, atualizarLancamento, validarLancamento,
   rowToLancamento, gerarParcelamento, listarCategorias, rowToCategoria, listarContas, rowToConta, listarRecorrencias,
   rowToRecorrencia, listarProjetos, rowToProjeto, garantirProjetosDosRazoes, garantirCategoria, newId, getMeta,
+  transacao, copiaDeSeguranca,
 } from './db.ts'
-import path from 'node:path'
-import fs from 'node:fs'
-import { ErroApp, erro, errosDeValidacao } from '../erros.ts'
+import { erro, errosDeValidacao } from '../erros.ts'
 import type { LancamentoInput, Backup, Recorrencia, Grupo, Categoria } from '../../shared/financas/types.ts'
+
+/** Erros do SQLite (restrição única etc.) viram uma mensagem legível; os demais seguem como estão. */
+const unico = (e: unknown, mensagem: string): never => { if (String(e).includes('UNIQUE')) erro(mensagem); throw e }
 
 type Row = Record<string, string | number | null | bigint | Uint8Array>
 
@@ -34,8 +36,7 @@ export function criarLancamento(input: LancamentoInput) {
 export function lote({ itens = [], origemArquivo = null }: { itens: LancamentoInput[]; origemArquivo: string | null }) {
   const criados: string[] = []
   const rejeitados: { indice: number; erros: string[] }[] = []
-  db.exec('BEGIN')
-  try {
+  transacao(() => {
     itens.forEach((it, i) => {
       const erros = validarLancamento(it)
       if (erros.length) { rejeitados.push({ indice: i, erros }); return }
@@ -44,11 +45,7 @@ export function lote({ itens = [], origemArquivo = null }: { itens: LancamentoIn
       criados.push(l.id)
     })
     garantirProjetosDosRazoes() // custos importados criam o projeto correspondente
-    db.exec('COMMIT')
-  } catch (e) {
-    db.exec('ROLLBACK')
-    erro(String(e))
-  }
+  })
   return { criados: criados.length, rejeitados }
 }
 
@@ -68,8 +65,7 @@ export function recategorizar({ ids, categoria, subcategoria, grupo }: { ids: st
   if (!categoria?.trim()) erro('Categoria obrigatória.')
   const cat = categoria.trim(); const sub = subcategoria?.trim() || null
   const agora = new Date().toISOString()
-  db.exec('BEGIN')
-  try {
+  return transacao(() => {
     let atualizados = 0
     const upd = db.prepare('UPDATE lancamentos SET categoria = ?, subcategoria = ?, grupo = ?, atualizado_em = ? WHERE id = ? AND fora_do_fluxo = 0')
     for (const id of ids) {
@@ -81,9 +77,8 @@ export function recategorizar({ ids, categoria, subcategoria, grupo }: { ids: st
       atualizados += Number(upd.run(cat, sub, novoGrupo, agora, id).changes)
       if (!lanc.foraDoFluxo) garantirCategoria(lanc.tipo, novoGrupo, cat, sub)
     }
-    db.exec('COMMIT')
     return { atualizados }
-  } catch (e) { db.exec('ROLLBACK'); return erro(String(e)) }
+  })
 }
 
 export function atualizarLanc({ id, input }: { id: string; input: LancamentoInput }) {
@@ -131,8 +126,7 @@ export function atualizarCategoria({ id, nome, grupo, parentId }: { id: number; 
   const novoParent = parentId === undefined ? (atual!.parent_id as number | null) : parentId
   const tipo = atual!.tipo as string
   const alvo = db.prepare('SELECT * FROM categorias WHERE nome = ? AND tipo = ? AND parent_id IS ? AND id <> ?').get(novoNome, tipo, novoParent, id) as Row | undefined
-  db.exec('BEGIN')
-  try {
+  const mescla = transacao(() => {
     if (alvo) {
       if (atual!.parent_id == null) {
         db.prepare('UPDATE lancamentos SET categoria = ?, grupo = COALESCE(?, grupo) WHERE categoria = ? AND tipo = ? AND fora_do_fluxo = 0').run(alvo.nome as string, (alvo.grupo as string) ?? null, atual!.nome as string, tipo)
@@ -151,7 +145,6 @@ export function atualizarCategoria({ id, nome, grupo, parentId }: { id: number; 
         db.prepare('UPDATE recorrencias SET subcategoria = ?, categoria = ? WHERE subcategoria = ? AND categoria = ? AND tipo = ?').run(alvo.nome as string, paiNovo.nome as string, atual!.nome as string, paiAntigo.nome as string, tipo)
       }
       db.prepare('DELETE FROM categorias WHERE id = ?').run(id)
-      db.exec('COMMIT')
       return { ...rowToCategoria(alvo), mesclada: true }
     }
     db.prepare('UPDATE categorias SET nome = ?, grupo = ?, parent_id = ? WHERE id = ?').run(novoNome, novoGrupo, novoParent, id)
@@ -165,19 +158,14 @@ export function atualizarCategoria({ id, nome, grupo, parentId }: { id: number; 
       db.prepare('UPDATE lancamentos SET subcategoria = ?, categoria = ?, grupo = COALESCE(?, grupo) WHERE subcategoria = ? AND categoria = ? AND tipo = ? AND fora_do_fluxo = 0')
         .run(novoNome, (paiNovo?.nome ?? paiAntigo.nome) as string, (paiNovo?.grupo as string) ?? null, atual!.nome as string, paiAntigo.nome as string, tipo)
     }
-    db.exec('COMMIT')
-  } catch (e) {
-    db.exec('ROLLBACK')
-    if (e instanceof ErroApp) throw e
-    erro(String(e))
-  }
+    return null
+  })
+  if (mescla) return mescla
   return rowToCategoria(db.prepare('SELECT * FROM categorias WHERE id = ?').get(id) as Row)
 }
 
 export function reordenarCategorias({ ids = [] }: { ids: number[] }) {
-  db.exec('BEGIN')
-  ids.forEach((id, i) => db.prepare('UPDATE categorias SET ordem = ? WHERE id = ?').run(i + 1, id))
-  db.exec('COMMIT')
+  transacao(() => ids.forEach((id, i) => db.prepare('UPDATE categorias SET ordem = ? WHERE id = ?').run(i + 1, id)))
   return { ok: true as const }
 }
 
@@ -207,10 +195,12 @@ export function atualizarConta({ id, nome, tipo, ativo }: { id: number; nome?: s
   const atual = db.prepare('SELECT * FROM contas WHERE id = ?').get(id) as Row | undefined
   if (!atual) erro('Conta não encontrada.')
   const novoNome = nome?.trim() || (atual!.nome as string)
-  db.exec('BEGIN')
-  db.prepare('UPDATE contas SET nome = ?, tipo = ?, ativo = ? WHERE id = ?').run(novoNome, tipo ?? (atual!.tipo as string), ativo == null ? (atual!.ativo as number) : (ativo ? 1 : 0), id)
-  if (novoNome !== atual!.nome) db.prepare('UPDATE lancamentos SET conta = ? WHERE conta = ?').run(novoNome, atual!.nome as string)
-  db.exec('COMMIT')
+  try {
+    transacao(() => {
+      db.prepare('UPDATE contas SET nome = ?, tipo = ?, ativo = ? WHERE id = ?').run(novoNome, tipo ?? (atual!.tipo as string), ativo == null ? (atual!.ativo as number) : (ativo ? 1 : 0), id)
+      if (novoNome !== atual!.nome) db.prepare('UPDATE lancamentos SET conta = ? WHERE conta = ?').run(novoNome, atual!.nome as string)
+    })
+  } catch (e) { unico(e, 'Já existe uma conta com esse nome.') }
   return rowToConta(db.prepare('SELECT * FROM contas WHERE id = ?').get(id) as Row)
 }
 
@@ -235,13 +225,11 @@ export function atualizarProjeto({ id, nome, descricao }: { id: number; nome?: s
   if (!atual) erro('Projeto não encontrado.')
   const novoNome = nome?.trim() || (atual!.nome as string)
   if (novoNome !== atual!.nome && db.prepare('SELECT 1 FROM projetos WHERE nome = ? AND id <> ?').get(novoNome, atual!.id as number)) erro('Já existe um projeto com esse nome.')
-  db.exec('BEGIN')
-  try {
+  transacao(() => {
     db.prepare('UPDATE projetos SET nome = ?, descricao = ? WHERE id = ?').run(novoNome, descricao === undefined ? (atual!.descricao as string | null) : (descricao?.trim() || null), id)
     // os custos ficam ligados ao projeto pelo nome (ledger)
     if (novoNome !== atual!.nome) db.prepare('UPDATE lancamentos SET ledger = ?, atualizado_em = ? WHERE fora_do_fluxo = 1 AND ledger = ?').run(novoNome, new Date().toISOString(), atual!.nome as string)
-    db.exec('COMMIT')
-  } catch (e) { db.exec('ROLLBACK'); erro(String(e)) }
+  })
   return rowToProjeto(db.prepare('SELECT * FROM projetos WHERE id = ?').get(id) as Row)
 }
 
@@ -249,11 +237,12 @@ export function atualizarProjeto({ id, nome, descricao }: { id: number; nome?: s
 export function excluirProjeto({ id }: { id: number }) {
   const atual = db.prepare('SELECT * FROM projetos WHERE id = ?').get(id) as Row | undefined
   if (!atual) erro('Projeto não encontrado.')
-  db.exec('BEGIN')
-  const r = db.prepare('DELETE FROM lancamentos WHERE fora_do_fluxo = 1 AND ledger = ?').run(atual!.nome as string)
-  db.prepare('DELETE FROM projetos WHERE id = ?').run(id)
-  db.exec('COMMIT')
-  return { ok: true as const, custosRemovidos: Number(r.changes) }
+  const removidos = transacao(() => {
+    const r = db.prepare('DELETE FROM lancamentos WHERE fora_do_fluxo = 1 AND ledger = ?').run(atual!.nome as string)
+    db.prepare('DELETE FROM projetos WHERE id = ?').run(id)
+    return Number(r.changes)
+  })
+  return { ok: true as const, custosRemovidos: removidos }
 }
 
 // ---------- recorrências ----------
@@ -288,8 +277,7 @@ export function gerarRecorrencias({ ano, mes }: { ano: number; mes: number }) {
   const comp = `${ano}-${String(mes).padStart(2, '0')}`
   const recs = listarRecorrencias().filter((r) => r.ativo && r.inicio <= comp && (!r.fim || r.fim >= comp))
   const criados: string[] = []
-  db.exec('BEGIN')
-  for (const r of recs) {
+  transacao(() => { for (const r of recs) {
     const ja = db.prepare('SELECT 1 FROM lancamentos WHERE recorrencia_id = ? AND ano = ? AND mes = ?').get(r.id, ano, mes)
     if (ja) continue
     const ultimoDia = new Date(ano, mes, 0).getDate()
@@ -300,8 +288,7 @@ export function gerarRecorrencias({ ano, mes }: { ano: number; mes: number }) {
       observacoes: r.observacoes, origem: `recorrência: ${r.descricao}`, origemArquivo: null, diaConhecido: true, foraDoFluxo: false, ledger: null, recorrenciaId: r.id,
     })
     criados.push(l.id)
-  }
-  db.exec('COMMIT')
+  } })
   return { criados: criados.length }
 }
 
@@ -312,8 +299,9 @@ export function backup(): Backup {
 
 export function restaurar({ b, modo = 'substituir' }: { b: Backup; modo: 'substituir' | 'mesclar' }) {
   if (b?.versao !== 1 || !Array.isArray(b.lancamentos)) erro('Arquivo de backup inválido.')
-  db.exec('BEGIN')
-  try {
+  // substituir apaga tudo: antes, guarda uma cópia do banco atual
+  const copia = modo === 'substituir' ? copiaDeSeguranca('antes-de-restaurar') : null
+  return transacao(() => {
     if (modo === 'substituir') {
       db.exec('DELETE FROM lancamentos; DELETE FROM categorias; DELETE FROM contas; DELETE FROM recorrencias; DELETE FROM projetos;')
     }
@@ -335,28 +323,22 @@ export function restaurar({ b, modo = 'substituir' }: { b: Backup; modo: 'substi
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(r.id, r.descricao, r.valor, r.tipo, r.grupo, r.categoria, r.subcategoria, r.conta, r.formaPagamento, r.dia, r.inicio, r.fim, r.observacoes, r.ativo ? 1 : 0)
     for (const p of b.projetos ?? []) db.prepare('INSERT OR IGNORE INTO projetos (nome, descricao, criado_em) VALUES (?,?,?)').run(p.nome, p.descricao, p.criadoEm)
     garantirProjetosDosRazoes() // backups antigos (sem projetos) ganham um projeto por nome de custo
-    db.exec('COMMIT')
-    return { ok: true as const, lancamentos: n }
-  } catch (e) {
-    db.exec('ROLLBACK')
-    return erro(String(e))
-  }
+    return { ok: true as const, lancamentos: n, copia }
+  })
 }
 
-/** Cópia do arquivo .db ao lado do banco (backup físico). */
+/** Cópia do arquivo .db em backups/, ao lado do banco (backup físico, consistente mesmo com gravações pendentes). */
 export function backupArquivo() {
-  const dir = path.join(DATA_DIR, 'backups')
-  fs.mkdirSync(dir, { recursive: true })
-  const dest = path.join(dir, `financas-${new Date().toISOString().replace(/[:.]/g, '-')}.db`)
-  db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
-  fs.copyFileSync(DB_PATH, dest)
-  return { ok: true as const, arquivo: dest }
+  const dest = copiaDeSeguranca('copia')
+  if (!dest) erro('Banco em memória: não há arquivo para copiar.')
+  return { ok: true as const, arquivo: dest! }
 }
 
 export function limpar({ confirmar }: { confirmar: string }) {
   if (confirmar !== 'APAGAR TUDO') erro('Confirmação inválida.')
-  db.exec('BEGIN; DELETE FROM lancamentos; DELETE FROM categorias; DELETE FROM contas; DELETE FROM recorrencias; DELETE FROM projetos; COMMIT;')
-  return { ok: true as const }
+  const copia = copiaDeSeguranca('antes-de-apagar')
+  transacao(() => db.exec('DELETE FROM lancamentos; DELETE FROM categorias; DELETE FROM contas; DELETE FROM recorrencias; DELETE FROM projetos;'))
+  return { ok: true as const, copia }
 }
 
 export function info() {

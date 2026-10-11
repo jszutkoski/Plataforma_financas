@@ -39,6 +39,6 @@ export const api = {
 
   backup: () => chamar<Backup>('fin:backup'),
   backupArquivo: () => chamar<{ ok: true; arquivo: string }>('fin:backupArquivo'),
-  restaurar: (b: Backup, modo: 'substituir' | 'mesclar') => chamar<{ ok: true; lancamentos: number }>('fin:restaurar', { b, modo }),
-  limpar: () => chamar<{ ok: true }>('fin:limpar', { confirmar: 'APAGAR TUDO' }),
+  restaurar: (b: Backup, modo: 'substituir' | 'mesclar') => chamar<{ ok: true; lancamentos: number; copia: string | null }>('fin:restaurar', { b, modo }),
+  limpar: () => chamar<{ ok: true; copia: string | null }>('fin:limpar', { confirmar: 'APAGAR TUDO' }),
 }

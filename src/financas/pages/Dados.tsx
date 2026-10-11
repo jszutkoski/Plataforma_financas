@@ -18,8 +18,8 @@ export function Dados() {
     if (!f) return
     try { const b = JSON.parse(await f.text()) as Backup; if (b.versao !== 1 || !Array.isArray(b.lancamentos)) throw new Error('Arquivo de backup inválido.'); setRestaurar({ b, modo }) } catch (e) { aviso((e as Error).message, 'erro') }
   }
-  const confirmarRestauracao = async () => { if (!restaurar) return; try { const r = await api.restaurar(restaurar.b, restaurar.modo); await recarregar(); aviso(`Backup restaurado (${r.lancamentos} lançamentos).`) } catch (e) { aviso((e as Error).message, 'erro') } setRestaurar(null) }
-  const limpar = async () => { try { await api.limpar(); await recarregar(); aviso('Todos os dados foram apagados.') } catch (e) { aviso((e as Error).message, 'erro') } setConfirmarLimpar(false); setTextoConf('') }
+  const confirmarRestauracao = async () => { if (!restaurar) return; try { const r = await api.restaurar(restaurar.b, restaurar.modo); await recarregar(); aviso(`Backup restaurado (${r.lancamentos} lançamentos).${r.copia ? ` Cópia dos dados anteriores: ${r.copia}` : ''}`) } catch (e) { aviso((e as Error).message, 'erro') } setRestaurar(null) }
+  const limpar = async () => { try { const r = await api.limpar(); await recarregar(); aviso(`Todos os dados foram apagados.${r.copia ? ` Cópia guardada em ${r.copia}` : ''}`) } catch (e) { aviso((e as Error).message, 'erro') } setConfirmarLimpar(false); setTextoConf('') }
   const exportarResumo = () => {
     const anos = [...new Set(lancamentos.filter((l) => !l.foraDoFluxo).map((l) => l.ano))].sort()
     const linhas: (string | number)[][] = []
