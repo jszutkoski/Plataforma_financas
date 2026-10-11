@@ -105,7 +105,7 @@ export function gastosPorCategoria(L: Lancamento[], ano: number, mes: number, ni
   for (const l of doMes(L, ano, mes)) {
     if (l.tipo !== 'despesa') continue
     if (filtroCategoria && l.categoria !== filtroCategoria) continue
-    const nome = (nivel === 'categoria' ? l.categoria : l.subcategoria) ?? 'Sem categoria'
+    const nome = nomeNivel(l, nivel, !!filtroCategoria)
     const it = map.get(nome) ?? { nome, valor: 0, grupo: l.grupo, n: 0 }
     it.valor += l.valor; it.n++
     map.set(nome, it)
@@ -113,11 +113,22 @@ export function gastosPorCategoria(L: Lancamento[], ano: number, mes: number, ni
   return [...map.values()].map((i) => ({ ...i, valor: r2(i.valor) })).sort((a, b) => b.valor - a.valor)
 }
 
+/**
+ * Rótulo no nível pedido. Subcategoria leva o nome da categoria ("Pets › Outros"), para não somar
+ * subcategorias homônimas de categorias diferentes — exceto quando a lista já é de uma só categoria.
+ */
+function nomeNivel(l: Lancamento, nivel: 'categoria' | 'subcategoria', dentroDaCategoria = false): string {
+  const cat = l.categoria ?? 'Sem categoria'
+  if (nivel === 'categoria') return cat
+  const sub = l.subcategoria ?? '(sem subcategoria)'
+  return dentroDaCategoria ? sub : `${cat} › ${sub}`
+}
+
 export function gastosPorCategoriaAno(L: Lancamento[], ano: number, nivel: 'categoria' | 'subcategoria' = 'categoria'): ItemCategoria[] {
   const map = new Map<string, ItemCategoria>()
   for (const l of noFluxo(L)) {
     if (l.ano !== ano || l.tipo !== 'despesa') continue
-    const nome = (nivel === 'categoria' ? l.categoria : l.subcategoria) ?? 'Sem categoria'
+    const nome = nomeNivel(l, nivel)
     const it = map.get(nome) ?? { nome, valor: 0, grupo: l.grupo, n: 0 }
     it.valor += l.valor; it.n++
     map.set(nome, it)

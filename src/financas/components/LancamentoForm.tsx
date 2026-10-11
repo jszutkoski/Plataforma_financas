@@ -48,6 +48,11 @@ export function LancamentoForm({ aberto, onFechar, editar, base, onSalvo }: Prop
     const pai = cats.find((c) => c.nome === f.categoria)
     return pai ? categorias.filter((c) => c.parentId === pai.id) : []
   }, [categorias, cats, f.categoria])
+  /** Ao escolher uma categoria da árvore, a natureza (Fixas/Variáveis…) passa a ser a dela; pode ser trocada depois. */
+  const escolherCategoria = (v: string) => {
+    const cat = cats.find((c) => c.nome === v)
+    setF((p) => ({ ...p, categoria: v || null, subcategoria: null, grupo: p.tipo === 'despesa' && cat?.grupo && GRUPOS_DESPESA.includes(cat.grupo) ? cat.grupo : p.grupo }))
+  }
   const sugestoesDesc = useMemo(() => descricoesFrequentes(lancamentos, f.tipo, f.descricao), [lancamentos, f.tipo, f.descricao])
 
   const aoSairDescricao = () => {
@@ -107,7 +112,7 @@ export function LancamentoForm({ aberto, onFechar, editar, base, onSalvo }: Prop
         <Campo rotulo="Tipo">
           <div className="flex flex-wrap gap-1">
             {TIPOS.map((t) => (
-              <button type="button" key={t} onClick={() => { set('tipo', t); set('categoria', null); set('subcategoria', null) }}
+              <button type="button" key={t} onClick={() => setF((p) => ({ ...p, tipo: t, categoria: null, subcategoria: null, grupo: t === 'despesa' ? 'Variáveis' : null }))}
                 className={`btn !py-1 !px-2.5 text-xs border ${f.tipo === t ? 'bg-renda text-white border-transparent' : 'bg-surface-2 border-transparent text-ink-2'}`}>{TIPO_LABEL[t]}</button>
             ))}
           </div>
@@ -137,7 +142,7 @@ export function LancamentoForm({ aberto, onFechar, editar, base, onSalvo }: Prop
           </Campo>
         )}
         <Campo rotulo="Categoria">
-          <input className="input" list="cat-lista" value={f.categoria ?? ''} onChange={(e) => { set('categoria', e.target.value || null); set('subcategoria', null) }} placeholder="Escolha ou digite uma nova" />
+          <input className="input" list="cat-lista" value={f.categoria ?? ''} onChange={(e) => escolherCategoria(e.target.value)} placeholder="Escolha ou digite uma nova" />
           <datalist id="cat-lista">{cats.map((c) => <option key={c.id} value={c.nome} />)}</datalist>
         </Campo>
         <Campo rotulo="Subcategoria">

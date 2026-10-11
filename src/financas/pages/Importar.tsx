@@ -9,7 +9,7 @@ import { sugerirCategoria } from '@fin/lib/suggest'
 import { Card, Campo, Confirm, Vazio } from '@fin/components/ui'
 
 export function Importar() {
-  const { lancamentos, recarregar, aviso } = useStore()
+  const { lancamentos, categorias, recarregar, aviso } = useStore()
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [tabelas, setTabelas] = useState<Tabela[]>([])
   const [aba, setAba] = useState(0)
@@ -52,7 +52,9 @@ export function Importar() {
     try {
       const itens = aImportar.map((l) => {
         const it = { ...l.item!, foraDoFluxo, ledger: foraDoFluxo ? arquivo.name : null }
-        if (it.tipo === 'despesa') it.grupo = grupoPadrao
+        // despesas com categoria conhecida ficam com a natureza dela; as demais com a natureza escolhida na tela
+        const naturezaDaCategoria = (nome: string | null) => categorias.find((c) => c.parentId == null && c.tipo === 'despesa' && c.nome === nome)?.grupo ?? null
+        if (it.tipo === 'despesa') it.grupo = naturezaDaCategoria(it.categoria) ?? grupoPadrao
         if (sugerir && !it.categoria) { const s = sugerirCategoria(lancamentos, it.descricao, it.tipo); if (s) { it.categoria = s.categoria; it.subcategoria = s.subcategoria; if (it.tipo === 'despesa' && s.grupo) it.grupo = s.grupo } }
         if (l.duplicata) it.observacoes = [it.observacoes, `Possível duplicata de ${l.duplicata.id}`].filter(Boolean).join(' · ')
         return it

@@ -200,11 +200,22 @@ const insertLanc = db.prepare(`INSERT INTO lancamentos
   observacoes, origem, origem_arquivo, dia_conhecido, fora_do_fluxo, ledger, recorrencia_id, parcelamento_id, criado_em, atualizado_em)
  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
 
-export function grupoPadrao(tipo: TipoLancamento, grupo?: Grupo | null): Grupo | null {
-  if (grupo) return grupo
+const GRUPOS_DE_DESPESA: Grupo[] = ['Fixas', 'Variáveis', 'Extras', 'Adicionais']
+
+/**
+ * Natureza do lançamento. Receitas, deduções e investimentos têm a natureza do próprio tipo (um grupo
+ * de despesa herdado de uma edição anterior é ignorado). Despesas usam a natureza informada se for válida;
+ * senão a da categoria na árvore; senão "Variáveis".
+ */
+export function grupoPadrao(tipo: TipoLancamento, grupo?: Grupo | null, categoria?: string | null): Grupo | null {
   if (tipo === 'receita') return 'Receita'
   if (tipo === 'deducao') return 'Dedução'
   if (tipo === 'investimento' || tipo === 'resgate') return 'Investimentos'
+  if (grupo && GRUPOS_DE_DESPESA.includes(grupo)) return grupo
+  if (categoria) {
+    const c = db.prepare("SELECT grupo FROM categorias WHERE nome = ? AND tipo = 'despesa' AND parent_id IS NULL").get(categoria) as Row | undefined
+    if (c?.grupo && GRUPOS_DE_DESPESA.includes(c.grupo as Grupo)) return c.grupo as Grupo
+  }
   return 'Variáveis'
 }
 
@@ -213,7 +224,7 @@ export function inserirLancamento(input: LancamentoInput, opts: { criadoEm?: str
   const id = input.id ?? newId()
   const ano = input.ano ?? Number(input.data.slice(0, 4))
   const mes = input.mes ?? Number(input.data.slice(5, 7))
-  const grupo = input.foraDoFluxo ? 'Fora do fluxo' : grupoPadrao(input.tipo, input.grupo)
+  const grupo = input.foraDoFluxo ? 'Fora do fluxo' : grupoPadrao(input.tipo, input.grupo, input.categoria)
   insertLanc.run(
     id, input.data, ano, mes, input.descricao.trim(), input.tipo, Math.round(input.valor * 100) / 100, grupo,
     input.categoria ?? null, input.subcategoria ?? null, input.conta ?? null, input.formaPagamento ?? null,
@@ -230,7 +241,7 @@ export function atualizarLancamento(id: string, input: LancamentoInput): Lancame
   const now = new Date().toISOString()
   const ano = input.ano ?? Number(input.data.slice(0, 4))
   const mes = input.mes ?? Number(input.data.slice(5, 7))
-  const grupo = input.foraDoFluxo ? 'Fora do fluxo' : grupoPadrao(input.tipo, input.grupo)
+  const grupo = input.foraDoFluxo ? 'Fora do fluxo' : grupoPadrao(input.tipo, input.grupo, input.categoria)
   db.prepare(`UPDATE lancamentos SET data=?, ano=?, mes=?, descricao=?, tipo=?, valor=?, grupo=?, categoria=?, subcategoria=?, conta=?,
     forma_pagamento=?, parcela=?, total_parcelas=?, observacoes=?, dia_conhecido=?, fora_do_fluxo=?, ledger=?, parcelamento_id=?, atualizado_em=? WHERE id=?`).run(
     input.data, ano, mes, input.descricao.trim(), input.tipo, Math.round(input.valor * 100) / 100, grupo, input.categoria ?? null,

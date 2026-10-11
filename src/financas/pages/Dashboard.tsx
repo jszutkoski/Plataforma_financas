@@ -92,7 +92,7 @@ function Mensal() {
             <table className="data">
               <thead><tr><th>Subcategoria</th><th className="text-right">Anterior</th><th className="text-right">Atual</th><th className="text-right">Variação</th></tr></thead>
               <tbody>
-                {[...variacoes.slice(0, 5), ...variacoes.slice(-4).filter((v) => v.delta < 0)].map((v) => (
+                {[...variacoes.slice(0, 5), ...variacoes.slice(5).slice(-4).filter((v) => v.delta < 0)].map((v) => (
                   <tr key={v.nome}><td>{v.nome}</td><td className="text-right tnum text-muted">{fmtBRL(v.anterior)}</td><td className="text-right tnum">{fmtBRL(v.atual)}</td>
                     <td className={`text-right tnum ${v.delta > 0 ? 'text-bad' : 'text-good'}`}>{v.delta > 0 ? '+' : ''}{fmtBRL(v.delta)}{v.pct != null && <span className="text-muted text-xs"> ({fmtPctDelta(v.pct)})</span>}</td></tr>
                 ))}
