@@ -190,7 +190,9 @@ export function validarLancamento(input: Partial<LancamentoInput>): string[] {
   if (!input.data || !ISO_DATE.test(input.data) || !dataValida(input.data)) erros.push('Data inválida (use AAAA-MM-DD).')
   if (!input.descricao || !String(input.descricao).trim()) erros.push('Descrição obrigatória.')
   if (!['receita', 'despesa', 'investimento', 'resgate', 'deducao'].includes(input.tipo as string)) erros.push('Tipo inválido.')
-  if (typeof input.valor !== 'number' || !Number.isFinite(input.valor) || input.valor <= 0) erros.push('Valor deve ser um número maior que zero.')
+  // despesa negativa = estorno/reembolso (abate o gasto); os demais tipos são sempre positivos
+  if (typeof input.valor !== 'number' || !Number.isFinite(input.valor) || input.valor === 0 || (input.valor < 0 && input.tipo !== 'despesa'))
+    erros.push(input.tipo === 'despesa' ? 'Valor deve ser diferente de zero (negativo para estorno).' : 'Valor deve ser um número maior que zero.')
   if (input.parcela != null && input.totalParcelas != null && input.parcela > input.totalParcelas) erros.push('Número da parcela maior que o total de parcelas.')
   return erros
 }

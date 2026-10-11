@@ -60,11 +60,14 @@ export function parseDataBR(v: unknown): string | null {
   const s = String(v).trim()
   let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
   if (m) return valida(+m[1], +m[2], +m[3])
-  m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/)
+  // dd/mm/aaaa, opcionalmente seguido de hora (extratos costumam trazer "03/04/2024 10:15")
+  m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})(?:[ T]+\d{1,2}:\d{2}(?::\d{2})?)?$/)
   if (m) {
     const y = m[3].length === 2 ? 2000 + +m[3] : +m[3]
     return valida(y, +m[2], +m[1])
   }
+  // datas numéricas em outro formato são ambíguas: o Date do JavaScript as leria como mês/dia
+  if (/^\d{1,2}[/.-]\d{1,2}/.test(s)) return null
   const d = new Date(s)
   return Number.isNaN(d.getTime()) ? null : toISO(d)
 }

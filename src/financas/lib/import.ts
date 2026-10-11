@@ -86,31 +86,68 @@ export function mapearAutomatico(colunas: string[]): Record<string, CampoDestino
   return m
 }
 
-export interface LinhaConvertida { indice: number; item: LancamentoInput | null; erros: string[]; duplicata: Lancamento | null; bruto: Record<string, unknown> }
+/**
+ * Como ler o sinal dos valores quando o arquivo não tem coluna de tipo:
+ * - extrato: positivo = entrada (receita), negativo = saída (despesa);
+ * - fatura: positivo = compra (despesa), negativo = estorno/crédito (despesa negativa, que abate o gasto);
+ * - planilha: o sinal é ignorado; vale o tipo padrão escolhido.
+ */
+export type FormatoArquivo = 'extrato' | 'fatura' | 'planilha'
+export const FORMATOS: { id: FormatoArquivo; rotulo: string; dica: string }[] = [
+  { id: 'fatura', rotulo: 'Fatura de cartão', dica: 'compras positivas; estornos e créditos negativos abatem o gasto' },
+  { id: 'extrato', rotulo: 'Extrato bancário', dica: 'entradas positivas viram receita; saídas negativas, despesa' },
+  { id: 'planilha', rotulo: 'Planilha própria', dica: 'sinal ignorado; usa a coluna de tipo ou o tipo padrão' },
+]
 
-function inferirTipo(v: unknown, valor: number | null, tipoPadrao: TipoLancamento): TipoLancamento {
+export interface LinhaConvertida {
+  indice: number
+  item: LancamentoInput | null
+  erros: string[]
+  /** Já existe na base (mesma data — ou mesmo mês, se o dia não era conhecido —, valor e descrição). */
+  duplicata: Lancamento | null
+  /** Mesma data, valor e tipo, mas descrição diferente: pode ser o mesmo gasto escrito de outro jeito. */
+  parecido: Lancamento | null
+  bruto: Record<string, unknown>
+}
+
+function inferirTipo(v: unknown): TipoLancamento | null {
   const s = v == null ? '' : norm(String(v))
   if (/^(receita|renda|entrada|credit|income|cr)/.test(s)) return 'receita'
   if (/^(despesa|gasto|saida|sa[ií]da|debit|expense|db)/.test(s)) return 'despesa'
   if (/^(invest|aporte)/.test(s)) return 'investimento'
   if (/^(resgate|retirada|withdraw)/.test(s)) return 'resgate'
   if (/^(dedu|desconto)/.test(s)) return 'deducao'
-  if (valor != null && valor < 0 && tipoPadrao === 'despesa') return 'despesa'
-  return tipoPadrao
+  return null
+}
+
+/** Tipo e valor a gravar, a partir do sinal, do formato do arquivo e da coluna de tipo (se houver). */
+export function tipoEValor(valorBruto: number, tipoColuna: TipoLancamento | null, formato: FormatoArquivo, tipoPadrao: TipoLancamento): { tipo: TipoLancamento; valor: number } {
+  const abs = Math.abs(valorBruto)
+  if (tipoColuna) return { tipo: tipoColuna, valor: formato === 'fatura' && tipoColuna === 'despesa' && valorBruto < 0 ? -abs : abs }
+  if (formato === 'extrato') return { tipo: valorBruto < 0 ? 'despesa' : 'receita', valor: abs }
+  if (formato === 'fatura') return { tipo: 'despesa', valor: valorBruto < 0 ? -abs : abs }
+  return { tipo: tipoPadrao, valor: abs }
 }
 
 /** Converte as linhas mapeadas em lançamentos, validando e apontando duplicatas contra o histórico. */
-export function converterLinhas(tabela: Tabela, mapa: Record<string, CampoDestino>, opts: { tipoPadrao: TipoLancamento; valorNegativoEhDespesa: boolean; existentes: Lancamento[] }): LinhaConvertida[] {
+export function converterLinhas(tabela: Tabela, mapa: Record<string, CampoDestino>, opts: { tipoPadrao: TipoLancamento; formato: FormatoArquivo; existentes: Lancamento[] }): LinhaConvertida[] {
   const col = (campo: CampoDestino) => Object.entries(mapa).find(([, v]) => v === campo)?.[0]
   const cData = col('data'), cDesc = col('descricao'), cValor = col('valor'), cTipo = col('tipo'), cCat = col('categoria'), cSub = col('subcategoria')
   const cConta = col('conta'), cForma = col('formaPagamento'), cParc = col('parcela'), cTot = col('totalParcelas'), cObs = col('observacoes')
-  const idx = new Map<string, Lancamento[]>()
+  // índices do histórico: por data exata e, para lançamentos sem dia conhecido, por mês
+  const porData = new Map<string, Lancamento[]>()
+  const iguais = new Map<string, Lancamento[]>()
+  const add = (m: Map<string, Lancamento[]>, k: string, l: Lancamento) => m.set(k, [...(m.get(k) ?? []), l])
   for (const l of opts.existentes) {
-    const k = `${l.data}|${l.valor.toFixed(2)}`
-    idx.set(k, [...(idx.get(k) ?? []), l])
+    if (l.foraDoFluxo) continue
+    add(porData, `${l.data}|${l.valor.toFixed(2)}`, l)
+    add(iguais, `${l.data}|${l.valor.toFixed(2)}|${norm(l.descricao)}`, l)
+    if (!l.diaConhecido) add(iguais, `${l.data.slice(0, 7)}|${l.valor.toFixed(2)}|${norm(l.descricao)}`, l)
   }
   const str = (v: unknown) => (v == null ? null : String(v).trim() || null)
-  const vistos = new Set<string>()
+  // linhas idênticas no próprio arquivo são legítimas (duas corridas iguais no mesmo dia): a k-ésima só é
+  // duplicata se o histórico já tiver pelo menos k lançamentos iguais
+  const ocorrencias = new Map<string, number>()
   return tabela.linhas.map((bruto, indice) => {
     const erros: string[] = []
     const data = cData ? parseDataBR(bruto[cData]) : null
@@ -119,26 +156,27 @@ export function converterLinhas(tabela: Tabela, mapa: Record<string, CampoDestin
     if (!descricao) erros.push('Descrição vazia')
     const valorBruto = cValor ? parseValorBR(bruto[cValor] as string) : null
     if (valorBruto == null || valorBruto === 0) erros.push(cValor ? `Valor inválido: "${bruto[cValor] ?? ''}"` : 'Coluna de valor não mapeada')
-    let tipo = inferirTipo(cTipo ? bruto[cTipo] : null, valorBruto, opts.tipoPadrao)
-    if (valorBruto != null && valorBruto < 0 && !cTipo) tipo = opts.valorNegativoEhDespesa ? 'despesa' : 'receita'
-    else if (valorBruto != null && valorBruto < 0 && cTipo == null) tipo = 'despesa'
-    const valor = valorBruto == null ? 0 : Math.abs(valorBruto)
+    const tipoColuna = cTipo ? inferirTipo(bruto[cTipo]) : null
     const parcela = cParc ? Number(parseValorBR(bruto[cParc] as string) ?? 0) || null : null
     const totalParcelas = cTot ? Number(parseValorBR(bruto[cTot] as string) ?? 0) || null : null
     let item: LancamentoInput | null = null
     let duplicata: Lancamento | null = null
-    if (!erros.length && data && descricao) {
+    let parecido: Lancamento | null = null
+    if (!erros.length && data && descricao && valorBruto != null) {
+      const { tipo, valor } = tipoEValor(valorBruto, tipoColuna, opts.formato, opts.tipoPadrao)
       item = {
         data, descricao, tipo, valor, grupo: null, categoria: cCat ? str(bruto[cCat]) : null, subcategoria: cSub ? str(bruto[cSub]) : null,
         conta: cConta ? str(bruto[cConta]) : null, formaPagamento: cForma ? str(bruto[cForma]) : null, parcela, totalParcelas,
         observacoes: cObs ? str(bruto[cObs]) : null, origem: null, origemArquivo: null, diaConhecido: true, foraDoFluxo: false, ledger: null, recorrenciaId: null,
       }
-      const cand = idx.get(`${data}|${valor.toFixed(2)}`) ?? []
-      duplicata = cand.find((l) => norm(l.descricao) === norm(descricao)) ?? cand.find((l) => l.tipo === tipo) ?? null
-      const k = `${data}|${valor.toFixed(2)}|${norm(descricao)}`
-      if (vistos.has(k)) erros.push('Linha repetida dentro do próprio arquivo')
-      vistos.add(k)
+      const v = valor.toFixed(2), d = norm(descricao)
+      const k = `${data}|${v}|${d}`
+      const n = (ocorrencias.get(k) ?? 0) + 1
+      ocorrencias.set(k, n)
+      const mesmos = [...(iguais.get(k) ?? []), ...(iguais.get(`${data.slice(0, 7)}|${v}|${d}`) ?? [])]
+      duplicata = mesmos.length >= n ? mesmos[n - 1] : null
+      if (!duplicata) parecido = (porData.get(`${data}|${v}`) ?? []).find((l) => l.tipo === tipo) ?? null
     }
-    return { indice, item: erros.length ? null : item, erros, duplicata, bruto }
+    return { indice, item: erros.length ? null : item, erros, duplicata, parecido, bruto }
   })
 }

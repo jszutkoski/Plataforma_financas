@@ -4,7 +4,7 @@ import { TIPOS, TIPO_LABEL, GRUPOS_DESPESA } from '@fin-shared/types'
 import { useStore } from '@fin/lib/store'
 import { api } from '@fin/lib/api'
 import { fmtBRL, fmtData } from '@fin/lib/format'
-import { lerArquivo, lerWorkbook, ehCSV, mapearAutomatico, converterLinhas, CAMPOS, type Tabela, type CampoDestino } from '@fin/lib/import'
+import { lerArquivo, lerWorkbook, ehCSV, mapearAutomatico, converterLinhas, CAMPOS, FORMATOS, type Tabela, type CampoDestino, type FormatoArquivo } from '@fin/lib/import'
 import { sugerirCategoria } from '@fin/lib/suggest'
 import { Card, Campo, Confirm, Vazio } from '@fin/components/ui'
 
@@ -16,7 +16,7 @@ export function Importar() {
   const [mapa, setMapa] = useState<Record<string, CampoDestino>>({})
   const [tipoPadrao, setTipoPadrao] = useState<TipoLancamento>('despesa')
   const [grupoPadrao, setGrupoPadrao] = useState<Grupo>('Variáveis')
-  const [negativoDespesa, setNegativoDespesa] = useState(true)
+  const [formato, setFormato] = useState<FormatoArquivo>('fatura')
   const [pularDuplicatas, setPularDuplicatas] = useState(true)
   const [sugerir, setSugerir] = useState(true)
   const [foraDoFluxo, setForaDoFluxo] = useState(false)
@@ -40,10 +40,18 @@ export function Importar() {
     } catch (e) { setErro(`Não foi possível ler o arquivo: ${(e as Error).message}`) }
   }
   const tabela = tabelas[aba]
-  const linhas = useMemo(() => (tabela ? converterLinhas(tabela, mapa, { tipoPadrao, valorNegativoEhDespesa: negativoDespesa, existentes: lancamentos }) : []), [tabela, mapa, tipoPadrao, negativoDespesa, lancamentos])
+  const linhas = useMemo(() => (tabela ? converterLinhas(tabela, mapa, { tipoPadrao, formato, existentes: lancamentos }) : []), [tabela, mapa, tipoPadrao, formato, lancamentos])
   const validas = linhas.filter((l) => l.item)
   const duplicadas = validas.filter((l) => l.duplicata)
   const aImportar = validas.filter((l) => !(pularDuplicatas && l.duplicata))
+  const parecidos = validas.filter((l) => l.parecido)
+  // totais por tipo do que será gravado: um sinal lido ao contrário aparece aqui antes de importar
+  const totaisPrevia = aImportar.reduce((t, l) => {
+    const it = l.item!
+    const k = it.tipo === 'despesa' && it.valor < 0 ? 'Estornos' : ({ receita: 'Receitas', despesa: 'Despesas', investimento: 'Investimentos', resgate: 'Resgates', deducao: 'Deduções' } as const)[it.tipo]
+    t[k] = (t[k] ?? 0) + Math.abs(it.valor)
+    return t
+  }, {} as Record<string, number>)
   const faltando = CAMPOS.filter((c) => c.obrigatorio && !Object.values(mapa).includes(c.id))
 
   const enviar = async () => {
@@ -56,7 +64,8 @@ export function Importar() {
         const naturezaDaCategoria = (nome: string | null) => categorias.find((c) => c.parentId == null && c.tipo === 'despesa' && c.nome === nome)?.grupo ?? null
         if (it.tipo === 'despesa') it.grupo = naturezaDaCategoria(it.categoria) ?? grupoPadrao
         if (sugerir && !it.categoria) { const s = sugerirCategoria(lancamentos, it.descricao, it.tipo); if (s) { it.categoria = s.categoria; it.subcategoria = s.subcategoria; if (it.tipo === 'despesa' && s.grupo) it.grupo = s.grupo } }
-        if (l.duplicata) it.observacoes = [it.observacoes, `Possível duplicata de ${l.duplicata.id}`].filter(Boolean).join(' · ')
+        const outro = l.duplicata ?? l.parecido
+        if (outro) it.observacoes = [it.observacoes, `Possível duplicata de ${outro.id}`].filter(Boolean).join(' · ')
         return it
       })
       const r = await api.lote(itens, arquivo.name)
@@ -86,36 +95,36 @@ export function Importar() {
           </div>
           {faltando.length > 0 && <p className="text-sm text-bad mt-2">Mapeie: {faltando.map((f) => f.rotulo).join(', ')}.</p>}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-            <Campo rotulo="Tipo padrão (quando não há coluna de tipo)"><select className="input" value={tipoPadrao} onChange={(e) => setTipoPadrao(e.target.value as TipoLancamento)}>{TIPOS.map((t) => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}</select></Campo>
+            <Campo rotulo="Formato do arquivo (sinal dos valores)"><select className="input" value={formato} onChange={(e) => setFormato(e.target.value as FormatoArquivo)}>{FORMATOS.map((f) => <option key={f.id} value={f.id}>{f.rotulo}</option>)}</select><span className="text-xs text-muted">{FORMATOS.find((f) => f.id === formato)?.dica}</span></Campo>
+            {formato === 'planilha' && <Campo rotulo="Tipo padrão (quando não há coluna de tipo)"><select className="input" value={tipoPadrao} onChange={(e) => setTipoPadrao(e.target.value as TipoLancamento)}>{TIPOS.map((t) => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}</select></Campo>}
             <Campo rotulo="Natureza das despesas"><select className="input" value={grupoPadrao} onChange={(e) => setGrupoPadrao(e.target.value as Grupo)}>{GRUPOS_DESPESA.map((g) => <option key={g}>{g}</option>)}</select></Campo>
             <div className="text-xs space-y-1.5 pt-5">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={negativoDespesa} onChange={(e) => setNegativoDespesa(e.target.checked)} />Valores negativos são despesas (extratos)</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={sugerir} onChange={(e) => setSugerir(e.target.checked)} />Sugerir categoria pelo histórico</label>
+                            <label className="flex items-center gap-2"><input type="checkbox" checked={sugerir} onChange={(e) => setSugerir(e.target.checked)} />Sugerir categoria pelo histórico</label>
             </div>
             <div className="text-xs space-y-1.5 pt-5">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={pularDuplicatas} onChange={(e) => setPularDuplicatas(e.target.checked)} />Ignorar possíveis duplicatas</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={pularDuplicatas} onChange={(e) => setPularDuplicatas(e.target.checked)} />Ignorar o que já existe (mesma data, valor e descrição)</label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={foraDoFluxo} onChange={(e) => setForaDoFluxo(e.target.checked)} />Importar como custos de projeto (fora do fluxo mensal)</label>
             </div>
           </div>
         </Card>
-        <Card title="3. Prévia e validação" subtitle={`${linhas.length} linhas lidas · ${validas.length} válidas · ${linhas.length - validas.length} com erro · ${duplicadas.length} possíveis duplicatas`}>
+        <Card title="3. Prévia e validação" subtitle={`${linhas.length} linhas lidas · ${validas.length} válidas · ${linhas.length - validas.length} com erro · ${duplicadas.length} já existentes · ${parecidos.length} parecidas com lançamentos existentes`}>
           {!linhas.length ? <Vazio>Sem linhas.</Vazio> : (
             <div className="overflow-x-auto max-h-[420px]"><table className="data min-w-[720px]">
               <thead><tr><th>#</th><th>Status</th><th>Data</th><th>Descrição</th><th>Tipo</th><th>Categoria</th><th className="text-right">Valor</th></tr></thead>
               <tbody>{linhas.slice(0, 300).map((l) => (
                 <tr key={l.indice} className={l.erros.length ? 'text-bad' : l.duplicata ? 'text-muted' : ''}>
                   <td className="tnum">{l.indice + 1}</td>
-                  <td className="text-xs">{l.erros.length ? l.erros.join('; ') : l.duplicata ? <span title={`Já existe: ${l.duplicata.descricao} em ${fmtData(l.duplicata.data)}`}>duplicata?</span> : <span className="text-good">ok</span>}</td>
+                  <td className="text-xs">{l.erros.length ? l.erros.join('; ') : l.duplicata ? <span title={`Já existe: ${l.duplicata.descricao} em ${fmtData(l.duplicata.data)}`}>já existe</span> : l.parecido ? <span className="tag-warn" title={`Mesma data e valor: ${l.parecido.descricao}`}>parecido com “{l.parecido.descricao}”</span> : <span className="text-good">ok</span>}</td>
                   <td className="tnum">{l.item ? fmtData(l.item.data) : String(l.bruto[Object.keys(mapa).find((k) => mapa[k] === 'data') ?? ''] ?? '')}</td>
                   <td className="max-w-[280px] truncate">{l.item?.descricao ?? String(l.bruto[Object.keys(mapa).find((k) => mapa[k] === 'descricao') ?? ''] ?? '')}</td>
-                  <td>{l.item ? TIPO_LABEL[l.item.tipo] : ''}</td>
+                  <td>{l.item ? (l.item.tipo === 'despesa' && l.item.valor < 0 ? 'Estorno' : TIPO_LABEL[l.item.tipo]) : ''}</td>
                   <td className="text-ink-2">{l.item?.categoria ?? (sugerir && l.item ? <span className="text-muted">{sugerirCategoria(lancamentos, l.item.descricao, l.item.tipo)?.categoria ?? '—'} (sugerida)</span> : '')}</td>
                   <td className="text-right tnum">{l.item ? fmtBRL(l.item.valor) : ''}</td>
                 </tr>))}</tbody>
             </table>{linhas.length > 300 && <p className="text-xs text-muted p-2">Mostrando as primeiras 300 linhas.</p>}</div>
           )}
           <div className="flex items-center justify-between mt-4 flex-wrap gap-2">
-            <p className="text-sm"><strong>{aImportar.length}</strong> lançamento(s) serão importados{pularDuplicatas && duplicadas.length ? ` (${duplicadas.length} duplicata(s) ignorada(s))` : ''}; {linhas.length - validas.length} linha(s) com erro serão descartadas.</p>
+            <p className="text-sm"><strong>{aImportar.length}</strong> lançamento(s) serão importados{pularDuplicatas && duplicadas.length ? ` (${duplicadas.length} já existente(s) ignorada(s))` : ''}; {linhas.length - validas.length} linha(s) com erro serão descartadas.{Object.keys(totaisPrevia).length > 0 && <span className="block text-xs text-ink-2 mt-1">{Object.entries(totaisPrevia).map(([k, v]) => `${k} ${fmtBRL(v)}`).join(' · ')}</span>}</p>
             <button className="btn-primary" disabled={!aImportar.length || faltando.length > 0 || enviando} onClick={() => setConfirmar(true)}>{enviando ? 'Importando…' : 'Importar'}</button>
           </div>
         </Card>

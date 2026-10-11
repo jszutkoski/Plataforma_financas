@@ -69,7 +69,9 @@ export function LancamentoForm({ aberto, onFechar, editar, base, onSalvo }: Prop
   const salvar = async (e: React.FormEvent) => {
     e.preventDefault()
     const valor = parseValorBR(valorTxt)
-    if (valor == null || valor <= 0) { setErro('Informe um valor maior que zero.'); return }
+    if (valor == null || valor === 0) { setErro('Informe um valor diferente de zero.'); return }
+    if (valor < 0 && f.tipo !== 'despesa') { setErro('Só despesas aceitam valor negativo (estorno ou reembolso).'); return }
+    if (valor < 0 && gerarParcelas && (f.totalParcelas ?? 0) > 1) { setErro('Estorno não pode ser parcelado.'); return }
     const item: LancamentoInput = { ...f, valor, descricao: f.descricao.trim(), categoria: f.categoria?.trim() || null, subcategoria: f.subcategoria?.trim() || null }
     if (!compManual) { delete item.ano; delete item.mes }
     if (f.tipo !== 'despesa') item.grupo = null

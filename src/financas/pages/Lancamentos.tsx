@@ -159,7 +159,7 @@ export function Lancamentos() {
                     <td><div className="flex items-center gap-2"><span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: COR_TIPO[l.tipo] }} title={TIPO_LABEL[l.tipo]} /><span className="truncate max-w-[320px]" title={l.observacoes ?? undefined}>{l.descricao}</span>{l.parcela && <span className="chip">{l.parcela}/{l.totalParcelas ?? '?'}</span>}</div></td>
                     <td className="text-ink-2 whitespace-nowrap">{l.categoria}{l.subcategoria ? <span className="text-muted"> › {l.subcategoria}</span> : ''}</td>
                     <td className="text-muted whitespace-nowrap">{l.conta ?? ''}{l.formaPagamento ? <span className="text-xs"> · {l.formaPagamento}</span> : ''}</td>
-                    <td className={`text-right tnum whitespace-nowrap ${l.tipo === 'receita' || l.tipo === 'resgate' ? 'text-good' : ''}`}>{l.tipo === 'despesa' || l.tipo === 'deducao' || l.tipo === 'investimento' ? '−' : '+'}{fmtBRL(l.valor)}</td>
+                    <td className={`text-right tnum whitespace-nowrap ${l.tipo === 'receita' || l.tipo === 'resgate' ? 'text-good' : ''}`}>{(l.tipo === 'despesa' || l.tipo === 'deducao' || l.tipo === 'investimento') !== (l.valor < 0) ? '−' : '+'}{fmtBRL(Math.abs(l.valor))}{l.tipo === 'despesa' && l.valor < 0 && <span className="chip ml-1">estorno</span>}</td>
                     <td className="text-right whitespace-nowrap">
                       <button className="btn-ghost !px-2 !py-0.5 text-xs" onClick={() => setEditar(l)} aria-label="Editar">Editar</button>
                       <button className="btn-ghost !px-2 !py-0.5 text-xs ml-1" onClick={() => duplicar(l)} aria-label="Duplicar" title="Duplicar com a data de hoje">⧉</button>

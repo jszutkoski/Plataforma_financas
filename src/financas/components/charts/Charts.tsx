@@ -5,8 +5,10 @@ import { CORES, Legenda, Tip, eixo, grade, tickBRL } from './common'
 
 /** Barras horizontais de categorias (top N + Outros), cor fixa por posição. */
 export function CategoriasBarras({ itens, total, max = 8, onClick }: { itens: ItemCategoria[]; total: number; max?: number; onClick?: (nome: string) => void }) {
-  const top = itens.slice(0, max)
-  const resto = itens.slice(max)
+  // categorias cujo saldo do período ficou negativo (só estornos) não viram barras
+  const positivos = itens.filter((i) => i.valor > 0)
+  const top = positivos.slice(0, max)
+  const resto = positivos.slice(max)
   const dados = [...top, ...(resto.length ? [{ nome: `Demais (${resto.length})`, valor: resto.reduce((s, i) => s + i.valor, 0), grupo: null, n: resto.length }] : [])]
   if (!dados.length) return <div className="text-sm text-muted py-6 text-center">Sem despesas no período.</div>
   const h = Math.max(160, dados.length * 30 + 20)

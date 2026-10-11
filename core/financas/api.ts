@@ -53,6 +53,7 @@ export function lote({ itens = [], origemArquivo = null }: { itens: LancamentoIn
 export function parcelamento({ base, valorTotal, totalParcelas, dataInicio, parcelamentoId }: { base: LancamentoInput; valorTotal: number; totalParcelas: number; dataInicio: string; parcelamentoId?: string | null }) {
   const erros = validarLancamento({ ...base, data: dataInicio, valor: valorTotal, parcela: null, totalParcelas: null })
   if (!(totalParcelas >= 1) || !Number.isInteger(totalParcelas)) erros.push('Número de parcelas inválido.')
+  if (valorTotal < 0) erros.push('Compra parcelada deve ter valor positivo.')
   if (erros.length) errosDeValidacao(erros)
   const r = gerarParcelamento(base, valorTotal, totalParcelas, dataInicio, parcelamentoId ?? null)
   if (!base.foraDoFluxo) garantirCategoria(base.tipo, base.grupo, base.categoria, base.subcategoria)
