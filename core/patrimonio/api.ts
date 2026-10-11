@@ -7,7 +7,7 @@ import {
   gerarBackup, restaurarBackup, registrarAlteracao, newId, copiaDeSeguranca,
 } from './db.ts'
 import { validar } from './validar.ts'
-import { erro, errosDeValidacao } from '../erros.ts'
+import { ErroApp, erro, errosDeValidacao } from '../erros.ts'
 import * as financas from '../financas/api.ts'
 import { DB_PATH as FINANCAS_DB } from '../financas/db.ts'
 import type { Backup, Info, Movimentacao, Posicao, FluxoConsolidado, Fechamento, Conta } from '../../shared/patrimonio/types.ts'
@@ -68,6 +68,17 @@ export function atualizar({ t, id, item: corpoBruto }: { t: string; id: string; 
   } catch (e) { return erro(String((e as Error).message)) }
 }
 
+/**
+ * Uma movimentação enviada ao Finanças tem lá um lançamento de caixa criado a partir dela (origem
+ * "patrimonio:<id>"). Ao excluir a movimentação, esse lançamento sai junto — senão ficaria um aporte
+ * sem movimentação, e registrar de novo criaria um segundo. Lançamentos digitados no Finanças não são tocados.
+ */
+function removerLancamentoDoFinancas(m: Movimentacao) {
+  if (!m.financasId) return
+  const l = (financas.lancamentos() as Lancamento[]).find((x) => x.id === m.financasId)
+  if (l && l.origem === `patrimonio:${m.id}`) financas.excluirLancamento({ id: l.id })
+}
+
 export function remover({ t, id, motivo }: { t: string; id: string; motivo?: string }) {
   const n = tabela(t); if (!n) erro('Tabela desconhecida.')
   const atual = obter<Obj>(n!, id)
@@ -80,6 +91,7 @@ export function remover({ t, id, motivo }: { t: string; id: string; motivo?: str
     if (n === 'bens') for (const a of listar<Obj>('avaliacoesBem', 'bem_id = ?', [id])) excluir('avaliacoesBem', a.id as string)
     if (n === 'dividas') for (const a of listar<Obj>('saldosDivida', 'divida_id = ?', [id])) excluir('saldosDivida', a.id as string)
     if (n === 'contas') for (const a of listar<Obj>('saldosConta', 'conta_id = ?', [id])) excluir('saldosConta', a.id as string)
+    if (n === 'movimentacoes') removerLancamentoDoFinancas(atual as unknown as Movimentacao)
     excluir(n!, id)
     registrarAlteracao({ entidade: n!, entidadeId: id, descricao: `Exclusão de ${n}`, antes: atual!, depois: null, motivo: motivo ?? null, periodosAfetados: [periodoDe(atual!)].filter((x): x is string => !!x) })
   })
@@ -121,7 +133,14 @@ interface FechamentoCorpo {
   ano: number; mes: number; status: 'rascunho' | 'confirmado'; movimentacoesConfirmadas: boolean; observacoes: string | null
   posicoes: Partial<Posicao>[]; movimentacoes: Partial<Movimentacao>[]; excluirMovimentacoes?: string[]; investimentosNovos?: Obj[]; encerrar?: { investimentoId: string; data: string }[]
   fluxo?: Partial<FluxoConsolidado> | null; motivo?: string | null
+  /** total da carteira informado na tela: saldo null remove um total manual existente; ausente = sem mudança */
+  totalCarteira?: { saldo: number | null } | null
+  saldosConta?: { contaId: string; saldo: number }[]
+  saldosDivida?: { dividaId: string; saldo: number }[]
 }
+const ultimoDiaDoMes = (ano: number, mes: number) => `${chaveMes(ano, mes)}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`
+
+/** Fechamento do mês num único passo: ou tudo é gravado, ou nada (inclusive com erro de validação em uma linha). */
 export function fechamento(c: FechamentoCorpo) {
   if (!c.ano || !c.mes) erro('Informe ano e mês.')
   const erros: string[] = []
@@ -143,7 +162,7 @@ export function fechamento(c: FechamentoCorpo) {
           registrarAlteracao({ entidade: 'posicoes', entidadeId: ex.id, descricao: 'Correção de posição em mês já confirmado', antes: ex, depois: it, motivo: c.motivo ?? null, periodosAfetados: [chaveMes(c.ano, c.mes)] })
         salvar('posicoes', it); nPos++
       }
-      for (const id of c.excluirMovimentacoes ?? []) excluir('movimentacoes', id)
+      for (const id of c.excluirMovimentacoes ?? []) { const m = obter<Movimentacao>('movimentacoes', id); if (m) removerLancamentoDoFinancas(m); excluir('movimentacoes', id) }
       for (const m of c.movimentacoes) {
         const it = normalizar('movimentacoes', { ...m, id: m.id || newId('mov'), origem: m.origem ?? 'manual' })
         const e = validar('movimentacoes', it); if (e.length) { erros.push(...e); continue }
@@ -159,10 +178,38 @@ export function fechamento(c: FechamentoCorpo) {
         // posições informadas passam a confirmadas
         for (const p of listar<Posicao>('posicoes', 'ano = ? AND mes = ? AND situacao = ?', [c.ano, c.mes, 'informada'])) salvar('posicoes', { ...p, situacao: 'confirmada' })
       }
+      const situacao = c.status === 'confirmado' ? 'confirmada' : 'informada'
+      const fim = ultimoDiaDoMes(c.ano, c.mes)
+      if (c.totalCarteira) {
+        const idC = `pc-${c.ano}-${String(c.mes).padStart(2, '0')}-carteira`
+        const ex = obter<Obj>('posicoesConsolidadas', idC)
+        if (c.totalCarteira.saldo == null) { if (ex && ex.origem === 'manual') excluir('posicoesConsolidadas', idC) }
+        else {
+          const it = { ...(ex ?? { id: idC, ano: c.ano, mes: c.mes, escopo: 'carteira', categoria: null, origem: 'manual' }), saldo: c.totalCarteira.saldo, situacao, dataPosicao: fim }
+          const e = validar('posicoesConsolidadas', it); if (e.length) erros.push(...e)
+          else {
+            if (ex && ex.origem !== 'manual') registrarAlteracao({ entidade: 'posicoesConsolidadas', entidadeId: idC, descricao: 'Total consolidado informado manualmente sobre valor importado', antes: ex, depois: it, motivo: c.motivo ?? null, periodosAfetados: [chaveMes(c.ano, c.mes)] })
+            salvar('posicoesConsolidadas', it)
+          }
+        }
+      }
+      for (const s of c.saldosConta ?? []) {
+        const it = normalizar('saldosConta', { contaId: s.contaId, ano: c.ano, mes: c.mes, data: fim, saldo: s.saldo, situacao, origem: 'manual' })
+        const e = validar('saldosConta', it); if (e.length) { erros.push(...e); continue }
+        salvar('saldosConta', it)
+      }
+      for (const s of c.saldosDivida ?? []) {
+        const ex = listar<Obj>('saldosDivida', 'divida_id = ? AND ano = ? AND mes = ?', [s.dividaId, c.ano, c.mes])[0]
+        const it = normalizar('saldosDivida', { ...(ex ?? { dividaId: s.dividaId, data: fim, origem: 'manual' }), saldoDevedor: s.saldo })
+        const e = validar('saldosDivida', it); if (e.length) { erros.push(...e); continue }
+        salvar('saldosDivida', it)
+      }
+      // qualquer linha inválida desfaz o fechamento inteiro: nada fica gravado pela metade
+      if (erros.length) erro(`Nada foi gravado. Corrija: ${[...new Set(erros)].join(' ')}`, { erros })
       return { fechamento: fech, posicoes: nPos, movimentacoes: nMov }
     })
     return { ...r, erros }
-  } catch (e) { return erro(String((e as Error).message)) }
+  } catch (e) { if (e instanceof ErroApp) throw e; return erro(String((e as Error).message)) }
 }
 
 // ---------------------------------------------------------------- importação em lote (CSV/XLSX já interpretados na interface)

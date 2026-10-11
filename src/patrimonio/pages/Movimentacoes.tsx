@@ -15,13 +15,16 @@ export function Movimentacoes() {
   const [sit, setSit] = useState('')
   const [form, setForm] = useState<Movimentacao | 'nova' | null>(null)
   const [excluir, setExcluir] = useState<Movimentacao | null>(null)
+  const [registrando, setRegistrando] = useState<string | null>(null)
 
   const lista = useMemo(() => [...base.movimentacoes]
     .filter((m) => (!ano || (ano === 'sem' ? !m.ano : m.ano === Number(ano))) && (!tipo || m.tipo === tipo) && (!invId || m.investimentoId === invId) && (!sit || m.situacao === sit))
     .sort((a, b) => (b.data ?? '0').localeCompare(a.data ?? '0')), [base, ano, tipo, invId, sit])
 
   const registrarFinancas = async (m: Movimentacao) => {
-    try { const r = await api.financasLancamento(m.id); aviso(r.jaExistia ? 'Já existia no Finanças; vínculo registrado.' : 'Lançamento criado no Finanças.'); await recarregar() } catch (e) { aviso((e as Error).message, 'erro') }
+    if (registrando) return // um clique por vez: evita criar o lançamento duas vezes
+    setRegistrando(m.id)
+    try { const r = await api.financasLancamento(m.id); aviso(r.jaExistia ? 'Já existia no Finanças; vínculo registrado.' : 'Lançamento criado no Finanças.'); await recarregar() } catch (e) { aviso((e as Error).message, 'erro') } finally { setRegistrando(null) }
   }
 
   return (
@@ -55,7 +58,7 @@ export function Movimentacoes() {
                     <td><Tag s={m.situacao} title={m.observacoes ?? undefined} /></td>
                     <td className="text-xs text-muted" title={m.origemArquivo ?? undefined}>{m.origem}{m.financasId && <span className="tag-ok"> · Finanças</span>}</td>
                     <td className="text-right whitespace-nowrap">
-                      {info?.financas.disponivel && !m.financasId && m.origemRecurso === 'externo' && ['aplicacao', 'compra', 'resgate', 'venda', 'amortizacao'].includes(m.tipo) && m.data && <button className="btn-ghost !py-0.5 !px-2 text-xs" title="Criar o lançamento de caixa correspondente no app Finanças" onClick={() => registrarFinancas(m)}>→ Finanças</button>}
+                      {info?.financas.disponivel && !m.financasId && m.origemRecurso === 'externo' && ['aplicacao', 'compra', 'resgate', 'venda', 'amortizacao'].includes(m.tipo) && m.data && <button className="btn-ghost !py-0.5 !px-2 text-xs" title="Criar o lançamento de caixa correspondente no app Finanças" disabled={!!registrando} onClick={() => registrarFinancas(m)}>→ Finanças</button>}
                       <button className="btn-ghost !py-0.5 !px-2 text-xs" onClick={() => setForm(m)}>Editar</button> <button className="btn-ghost !py-0.5 !px-2 text-xs" onClick={() => setExcluir(m)}>Excluir</button>
                     </td>
                   </tr>
@@ -67,7 +70,7 @@ export function Movimentacoes() {
         )}
       </Card>
       {form && <MovimentacaoForm mov={form === 'nova' ? undefined : form} onFechar={() => setForm(null)} onSalvo={async () => { setForm(null); await recarregar() }} />}
-      <Confirm aberto={!!excluir} titulo="Excluir movimentação" perigoso confirmar="Excluir" onCancelar={() => setExcluir(null)} mensagem={<>Excluir {excluir && TIPO_MOV_LABEL[excluir.tipo]} de <Valor v={excluir?.valor} /> ({excluir?.data ? fmtData(excluir.data) : 'sem data'})? A exclusão fica no histórico de alterações.</>}
+      <Confirm aberto={!!excluir} titulo="Excluir movimentação" perigoso confirmar="Excluir" onCancelar={() => setExcluir(null)} mensagem={<>Excluir {excluir && TIPO_MOV_LABEL[excluir.tipo]} de <Valor v={excluir?.valor} /> ({excluir?.data ? fmtData(excluir.data) : 'sem data'})? A exclusão fica no histórico de alterações.{excluir?.financasId && <> O lançamento de caixa que ela criou no Finanças também será excluído.</>}</>}
         onConfirmar={async () => { try { await api.excluir('movimentacoes', excluir!.id, 'exclusão manual'); setExcluir(null); aviso('Movimentação excluída.'); await recarregar() } catch (e) { aviso((e as Error).message, 'erro') } }} />
     </div>
   )

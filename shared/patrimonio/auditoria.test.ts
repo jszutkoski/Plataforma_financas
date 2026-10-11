@@ -62,3 +62,19 @@ test('PAT-003: mês sem posição dos investimentos não mostra patrimônio como
   // sem nenhum investimento cadastrado, o patrimônio é só o que existe
   assert.equal(liquido(base({ bens: [apto] }), 2026, 9), 300000)
 })
+
+test('PAT-009: evento societário soma ou subtrai pela quantidade com sinal', async () => {
+  const { quantidadeAte } = await import('./calc.ts')
+  const acao: Investimento = { ...inv('X'), categoria: 'Acoes' }
+  const m = (tipo: Movimentacao['tipo'], quantidade: number, data: string): Movimentacao => ({ ...mov(tipo, 0), id: `${tipo}-${data}`, investimentoId: 'X', quantidade, data, ano: Number(data.slice(0, 4)), mes: Number(data.slice(5, 7)) })
+  const b = base({ investimentos: [acao], movimentacoes: [m('compra', 100, '2026-01-10'), m('evento', 100, '2026-02-10'), m('evento', -50, '2026-03-10')] })
+  const ix = indexar(b)
+  assert.equal(quantidadeAte(ix, 'X', 2026, 2), 200, 'desdobramento 1:2')
+  assert.equal(quantidadeAte(ix, 'X', 2026, 3), 150, 'grupamento')
+})
+
+test('PAT-005: saldo repetido há 3 meses ou mais é apontado como desatualizado', () => {
+  const b = base({ contas: [conta()], saldosConta: [saldoConta(2025, 6, 50000)] })
+  assert.deepEqual(patrimonioEm(b, indexar(b), 2025, 8).defasados, [])
+  assert.deepEqual(patrimonioEm(b, indexar(b), 2025, 9).defasados, [{ nome: 'CC', desde: '2025-06' }])
+})

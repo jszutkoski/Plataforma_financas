@@ -75,8 +75,9 @@ export function Dashboard() {
         </label>
       </div>
 
-      {antigo && <Aviso tipo="alerta">A última posição consolidada conhecida é de <strong>{fmtMesAno(ultimo?.[0] ?? ano, ultimo?.[1] ?? mes)}</strong>. Os valores abaixo não foram confirmados hoje — use <Link className="underline" to="/atualizar">Atualizar mês</Link> para registrar posições recentes.</Aviso>}
-      {faltam.length > 0 && <Aviso>Patrimônio cadastrado <strong>incompleto</strong>: ainda não há {faltam.join(', ')}. O que aparece aqui é só o que foi cadastrado — cadastre em <Link className="underline" to="/bens">Bens e dívidas</Link> e <Link className="underline" to="/bens#contas">Contas</Link>.</Aviso>}
+      {antigo && <Aviso tipo="alerta">A última posição consolidada conhecida é de <strong>{fmtMesAno(ultimo?.[0] ?? ano, ultimo?.[1] ?? mes)}</strong>. Os valores abaixo não foram confirmados hoje — use <Link className="underline" to="/patrimonio/atualizar">Atualizar mês</Link> para registrar posições recentes.</Aviso>}
+      {p.defasados.length > 0 && <Aviso tipo="alerta">Saldos repetidos de meses anteriores (não atualizados em {fmtMesAno(ano, mes)}): {p.defasados.map((d) => `${d.nome} (último em ${fmtMesAno(Number(d.desde.slice(0, 4)), Number(d.desde.slice(5, 7)))})`).join('; ')}. Atualize em <Link className="underline" to="/patrimonio/atualizar">Atualizar mês</Link> ou em Bens e dívidas.</Aviso>}
+      {faltam.length > 0 && <Aviso>Patrimônio cadastrado <strong>incompleto</strong>: ainda não há {faltam.join(', ')}. O que aparece aqui é só o que foi cadastrado — cadastre em <Link className="underline" to="/patrimonio/bens">Bens e dívidas</Link> e <Link className="underline" to="/patrimonio/bens#contas">Contas</Link>.</Aviso>}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi rotulo="Patrimônio bruto cadastrado" valor={p.bruto} cor={CORES.saldo} sub={<>investimentos + contas + participação nos bens</>} />
@@ -143,7 +144,7 @@ export function Dashboard() {
                 ))}
               </tbody>
             </table>
-            <p className="text-xs text-muted mt-2">A diferença entre dois períodos inclui aportes, resgates e mudanças de cobertura do cadastro — não é rendimento. O resultado apurado por mês está em <Link className="underline" to="/anos">Anos</Link>.</p>
+            <p className="text-xs text-muted mt-2">A diferença entre dois períodos inclui aportes, resgates e mudanças de cobertura do cadastro — não é rendimento. O resultado apurado por mês está em <Link className="underline" to="/patrimonio/anos">Anos</Link>.</p>
           </div>
           <ComparativoBarras series={[{ nome: rotulo(compA), valores: { Investimentos: pA.investimentos, Contas: pA.contas, Bens: pA.bens || null, Dívidas: pA.dividas || null } }, { nome: rotulo(compB), valores: { Investimentos: pB.investimentos, Contas: pB.contas, Bens: pB.bens || null, Dívidas: pB.dividas || null } }]} />
         </div>
@@ -156,7 +157,7 @@ export function Dashboard() {
             <tbody>
               {anos.map((a) => { const r = resumoAno(base, ix, a); return (
                 <tr key={a}>
-                  <td><Link className="underline text-renda" to={`/anos?ano=${a}`}>{a}</Link></td>
+                  <td><Link className="underline text-renda" to={`/patrimonio/anos?ano=${a}`}>{a}</Link></td>
                   <td className="text-right"><Valor v={r.carteiraFim?.valor} vazio="sem fechamento" />{r.carteiraFim && r.carteiraFim.mes !== 12 && <span className="text-xs text-muted"> ({fmtMesAno(a, r.carteiraFim.mes)})</span>}</td>
                   <td className="text-right"><Valor v={r.aportes || null} /></td><td className="text-right"><Valor v={r.resgates || null} /></td><td className="text-right"><Valor v={r.proventos || null} /></td>
                   <td className="text-right"><Valor v={r.resultado} sinal vazio="—" /></td>

@@ -38,3 +38,40 @@ test('restaurar no modo mesclar nunca sobrescreve um mês que já tem dado', () 
   assert.deepEqual(saldos(), [[1, 1010], [2, 1020]], 'janeiro intacto, fevereiro acrescentado')
   assert.equal(r['ignorados por já existirem (mesmo mês/ativo)'], 1)
 })
+
+import * as fin from '../financas/api.ts'
+
+test('PAT-010: fechamento com uma linha inválida não grava nada', () => {
+  limpar()
+  const inv = api.criar({ t: 'investimentos', item: { nome: 'CDB', categoria: 'RendaFixa', situacao: 'ativo', dataInicio: '2026-01-01' } }) as { id: string }
+  assert.throws(() => api.fechamento({ ano: 2026, mes: 3, status: 'confirmado', movimentacoesConfirmadas: true, observacoes: null,
+    posicoes: [{ investimentoId: inv.id, saldo: 1000 }], movimentacoes: [], saldosConta: [{ contaId: '', saldo: 50 }] }), /Nada foi gravado/)
+  assert.equal(listar('posicoes').length, 0)
+  assert.equal(listar('fechamentos').length, 0)
+  assert.equal(db.isTransaction, false)
+})
+
+test('PAT-010: fechamento grava posições, total da carteira, contas e dívidas no mesmo passo', () => {
+  limpar()
+  const inv = api.criar({ t: 'investimentos', item: { nome: 'CDB', categoria: 'RendaFixa', situacao: 'ativo', dataInicio: '2026-01-01' } }) as { id: string }
+  const conta = api.criar({ t: 'contas', item: { nome: 'CC', tipo: 'corrente', ativo: true } }) as { id: string }
+  const div = api.criar({ t: 'dividas', item: { nome: 'Empréstimo', situacao: 'ativa' } }) as { id: string }
+  api.fechamento({ ano: 2026, mes: 3, status: 'confirmado', movimentacoesConfirmadas: true, observacoes: null, posicoes: [{ investimentoId: inv.id, saldo: 1000 }], movimentacoes: [],
+    totalCarteira: { saldo: 1000 }, saldosConta: [{ contaId: conta.id, saldo: 50 }], saldosDivida: [{ dividaId: div.id, saldo: 300 }] })
+  assert.deepEqual([listar('posicoes').length, listar('posicoesConsolidadas').length, listar('saldosConta').length, listar('saldosDivida').length, listar('fechamentos').length], [1, 1, 1, 1, 1])
+  // refazer o mês atualiza o saldo da dívida em vez de duplicar
+  api.fechamento({ ano: 2026, mes: 3, status: 'confirmado', movimentacoesConfirmadas: true, observacoes: null, posicoes: [{ investimentoId: inv.id, saldo: 1000 }], movimentacoes: [], saldosDivida: [{ dividaId: div.id, saldo: 290 }] })
+  assert.deepEqual(listar<{ saldoDevedor: number }>('saldosDivida').map((s) => s.saldoDevedor), [290])
+})
+
+test('PAT-006/007: registrar no Finanças só uma vez; excluir a movimentação exclui o lançamento criado por ela', () => {
+  limpar()
+  const inv = api.criar({ t: 'investimentos', item: { nome: 'CDB', categoria: 'RendaFixa', situacao: 'ativo', dataInicio: '2026-01-01' } }) as { id: string }
+  const m = api.criar({ t: 'movimentacoes', item: { investimentoId: inv.id, tipo: 'aplicacao', data: '2026-03-05', valor: 500, origemRecurso: 'externo' } }) as { id: string }
+  const antes = fin.lancamentos().length
+  api.financasLancamento({ movimentacaoId: m.id })
+  assert.throws(() => api.financasLancamento({ movimentacaoId: m.id }), /já foi registrada/)
+  assert.equal(fin.lancamentos().length, antes + 1)
+  api.remover({ t: 'movimentacoes', id: m.id })
+  assert.equal(fin.lancamentos().length, antes, 'o aporte criado pela movimentação saiu junto')
+})

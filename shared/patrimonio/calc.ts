@@ -82,8 +82,9 @@ export function quantidadeAte(ix: Indices, invId: string, ano: number, mes: numb
   for (const m of ix.movPorInv.get(invId) ?? []) {
     if (!m.data || m.data > lim || m.situacao === 'pendente' || m.quantidade == null) continue
     algum = true
-    if (m.tipo === 'compra' || m.tipo === 'bonificacao') q += m.quantidade
-    else if (m.tipo === 'venda' || m.tipo === 'evento') q -= m.quantidade
+    // evento societário: quantidade com sinal (+ desdobramento/bonificação recebida, − grupamento)
+    if (m.tipo === 'compra' || m.tipo === 'bonificacao' || m.tipo === 'evento') q += m.quantidade
+    else if (m.tipo === 'venda') q -= m.quantidade
   }
   return algum ? Math.round(q * 1e8) / 1e8 : null
 }
@@ -402,6 +403,8 @@ export interface Patrimonio {
   cobertura: { investimentos: boolean; contas: boolean; bens: boolean; dividas: boolean }
   /** quantos bens/dívidas/contas cadastrados ainda não têm valor neste mês */
   semValor: { contas: number; bens: number; dividas: number }
+  /** contas e dívidas cujo último saldo conhecido é de 3 ou mais meses antes deste mês (valor repetido, não atualizado) */
+  defasados: { nome: string; desde: string }[]
   dataReferencia: string | null
 }
 
@@ -426,7 +429,11 @@ export function dividaVigente(b: Base, d: Divida, ano: number, mes: number): boo
   return !encerradoAte(d.dataQuitacao, ultimo, ano, mes)
 }
 
+/** A partir de quantos meses um saldo repetido de conta ou dívida é apontado como desatualizado. */
+export const MESES_DEFASADO = 3
+
 export function patrimonioEm(b: Base, ix: Indices, ano: number, mes: number): Patrimonio {
+  const defasados: Patrimonio['defasados'] = []
   const lim = fimDoMes(ano, mes)
   const k = chaveMes(ano, mes)
   const inv = saldoCarteira(b, ix, ano, mes)
@@ -435,7 +442,7 @@ export function patrimonioEm(b: Base, ix: Indices, ano: number, mes: number): Pa
   let semConta = 0
   for (const c of b.contas.filter((c) => contaVigente(b, c, ano, mes))) {
     const s = b.saldosConta.filter((s) => s.contaId === c.id && chaveMes(s.ano, s.mes) <= k).sort((x, y) => chaveMes(y.ano, y.mes).localeCompare(chaveMes(x.ano, x.mes)))[0]
-    if (s) { contas += s.saldo; temConta = true; contasDetalhe.push({ conta: c, saldo: s.saldo, data: s.data ?? `${chaveMes(s.ano, s.mes)}` }) } else semConta++
+    if (s) { contas += s.saldo; temConta = true; contasDetalhe.push({ conta: c, saldo: s.saldo, data: s.data ?? `${chaveMes(s.ano, s.mes)}` }); if (cmp(ano, mes, s.ano, s.mes) >= MESES_DEFASADO) defasados.push({ nome: c.nome, desde: chaveMes(s.ano, s.mes) }) } else semConta++
   }
   let bens = 0, imoveis = 0, veiculos = 0, outros = 0, semBem = 0
   const bensDetalhe: Patrimonio['bensDetalhe'] = []
@@ -455,7 +462,7 @@ export function patrimonioEm(b: Base, ix: Indices, ano: number, mes: number): Pa
   for (const d of b.dividas.filter((d) => dividaVigente(b, d, ano, mes))) {
     if (d.dataInicio && d.dataInicio > lim) continue
     const s = b.saldosDivida.filter((s) => s.dividaId === d.id && s.data <= lim).sort((x, y) => y.data.localeCompare(x.data))[0] ?? null
-    if (s) { dividas += s.saldoDevedor; dividasDetalhe.push({ divida: d, saldo: s }) } else { semDiv++; dividasDetalhe.push({ divida: d, saldo: null }) }
+    if (s) { dividas += s.saldoDevedor; dividasDetalhe.push({ divida: d, saldo: s }); if (s.saldoDevedor !== 0 && cmp(ano, mes, s.ano, s.mes) >= MESES_DEFASADO) defasados.push({ nome: d.nome, desde: chaveMes(s.ano, s.mes) }) } else { semDiv++; dividasDetalhe.push({ divida: d, saldo: null }) }
   }
   const temBens = bensDetalhe.some((x) => x.avaliacao || x.participacao)
   // investimentos vigentes sem posição no mês: o total é desconhecido; tratar como zero mostraria uma queda falsa
@@ -467,7 +474,7 @@ export function patrimonioEm(b: Base, ix: Indices, ano: number, mes: number): Pa
     imoveis: r2(imoveis), veiculos: r2(veiculos), outrosBens: r2(outros), dividas: r2(dividas), dividasDetalhe,
     bruto: bruto == null ? null : r2(bruto), liquido: bruto == null ? null : r2(bruto - dividas),
     cobertura: { investimentos: inv.valor != null, contas: temConta, bens: temBens, dividas: dividasDetalhe.length > 0 && semDiv === 0 },
-    semValor: { contas: semConta, bens: semBem, dividas: semDiv }, dataReferencia: datas.length ? datas.sort().at(-1)! : null,
+    semValor: { contas: semConta, bens: semBem, dividas: semDiv }, defasados, dataReferencia: datas.length ? datas.sort().at(-1)! : null,
   }
 }
 

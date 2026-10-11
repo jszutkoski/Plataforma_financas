@@ -105,7 +105,7 @@ function Mensal() {
         <Card title="Despesas fora do padrão" subtitle="Acima de 8% da renda do mês ou 3× a mediana histórica da subcategoria">
           <ul className="text-sm divide-y" style={{ borderColor: 'var(--grid)' }}>
             {incomuns.map((l) => (
-              <li key={l.id} className="flex items-center gap-3 py-1.5 cursor-pointer hover:bg-surface-2 rounded px-1" onClick={() => nav(`/lancamentos?id=${l.id}`)}>
+              <li key={l.id} className="flex items-center gap-3 py-1.5 cursor-pointer hover:bg-surface-2 rounded px-1" onClick={() => nav(`/financas/lancamentos?id=${l.id}`)}>
                 <span className="text-muted text-xs w-12 tnum">{fmtData(l.data).slice(0, 5)}</span><span className="flex-1 truncate">{l.descricao}</span>
                 <span className="chip">{l.subcategoria ?? l.categoria}</span><span className="tnum font-medium">{fmtBRL(l.valor)}</span>
               </li>

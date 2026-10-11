@@ -50,7 +50,7 @@ export function AtivoDetalhe({ inv, onFechar }: { inv: Investimento; onFechar: (
           {capital != null && <div><span className="text-muted">Capital líquido aplicado:</span> <Valor v={capital} /></div>}
           <div><span className="text-muted">Realizado (recebido + proventos − aplicado):</span> <Valor v={real.valor} sinal /> {real.aplicado > 0 && <span className="text-xs text-muted">({fmtPct2(real.valor / real.aplicado)} sobre {<Valor v={real.aplicado} />})</span>}</div>
           <div className="text-xs text-muted">Realizado não usa valor de mercado; para ativos encerrados é o resultado completo, para ativos abertos falta somar o saldo atual.</div>
-          {pend.length > 0 && <div className="text-xs tag-bad">⚠ {pend.length} pendência(s): {pend.map((p) => p.motivo).join('; ')} — ver <Link to="/dados#pendencias" className="underline" onClick={onFechar}>Dados → Pendências</Link>.</div>}
+          {pend.length > 0 && <div className="text-xs tag-bad">⚠ {pend.length} pendência(s): {pend.map((p) => p.motivo).join('; ')} — ver <Link to="/patrimonio/dados#pendencias" className="underline" onClick={onFechar}>Dados → Pendências</Link>.</div>}
         </div>
       </div>
 

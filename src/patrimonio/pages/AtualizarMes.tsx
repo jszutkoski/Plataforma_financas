@@ -113,14 +113,13 @@ export function AtualizarMes() {
         }
         if (l.encerrar) corpo.encerrar!.push({ investimentoId: l.inv.id, data: ultimoDia(ano, mes) })
       }
-      const r = await api.fechamento(corpo)
-      // total consolidado (quando informado só o total)
+      // total consolidado, contas e dívidas vão no mesmo passo do fechamento: ou tudo é gravado, ou nada
       const tc = num(totalCarteira)
-      const idC = `pc-${ano}-${String(mes).padStart(2, '0')}-carteira`
-      if (tc != null) await (consol ? api.atualizar('posicoesConsolidadas', idC, { saldo: tc, situacao: status === 'confirmado' ? 'confirmada' : 'informada', dataPosicao: ultimoDia(ano, mes), motivo: consol.origem !== 'manual' ? 'total consolidado informado manualmente sobre valor importado' : undefined }) : api.criar('posicoesConsolidadas', { id: idC, ano, mes, escopo: 'carteira', categoria: null, saldo: tc, situacao: status === 'confirmado' ? 'confirmada' : 'informada', dataPosicao: ultimoDia(ano, mes), origem: 'manual' }))
-      else if (consol && consol.origem === 'manual') await api.excluir('posicoesConsolidadas', idC)
-      for (const [id, v] of Object.entries(contas)) { const s = num(v); const sid = `sc-${id}-${ano}-${String(mes).padStart(2, '0')}`; if (s != null) await api.criar('saldosConta', { id: sid, contaId: id, ano, mes, data: ultimoDia(ano, mes), saldo: s, situacao: status === 'confirmado' ? 'confirmada' : 'informada', origem: 'manual' }) }
-      for (const [id, v] of Object.entries(dividas)) { const s = num(v); if (s != null) { const ex = base.saldosDivida.find((x) => x.dividaId === id && x.ano === ano && x.mes === mes); if (ex) await api.atualizar('saldosDivida', ex.id, { saldoDevedor: s }); else await api.criar('saldosDivida', { dividaId: id, data: ultimoDia(ano, mes), saldoDevedor: s, origem: 'manual' }) } }
+      corpo.totalCarteira = tc != null ? { saldo: tc } : consol && consol.origem === 'manual' ? { saldo: null } : null
+      corpo.saldosConta = Object.entries(contas).flatMap(([contaId, v]) => { const s = num(v); return s != null ? [{ contaId, saldo: s }] : [] })
+      corpo.saldosDivida = Object.entries(dividas).flatMap(([dividaId, v]) => { const s = num(v); return s != null ? [{ dividaId, saldo: s }] : [] })
+      if (consol && consol.origem !== 'manual' && tc != null) corpo.motivo = corpo.motivo ?? 'total consolidado informado manualmente sobre valor importado'
+      const r = await api.fechamento(corpo)
       if (r.erros.length) aviso(`Salvo com avisos: ${r.erros.join(' ')}`, 'erro')
       else aviso(status === 'confirmado' ? `Fechamento de ${fmtMesAno(ano, mes)} confirmado.` : `Rascunho de ${fmtMesAno(ano, mes)} salvo.`)
       await recarregar()
@@ -136,7 +135,7 @@ export function AtualizarMes() {
         <select className="input !w-auto !py-1" value={mes} onChange={(e) => irPara(ano, Number(e.target.value))} aria-label="Mês">{MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
         <select className="input !w-auto !py-1 font-semibold" value={ano} onChange={(e) => irPara(Number(e.target.value), mes)} aria-label="Ano">{[...new Set([...anos, ano, anos.at(-1)! + 1])].sort().map((a) => <option key={a} value={a}>{a}</option>)}</select>
         <button className="btn-ghost !px-2 !py-1" onClick={() => irPara(...mesSeguinte(ano, mes))} aria-label="Próximo mês">›</button>
-        <div className="ml-auto text-xs text-muted">{fech ? <>Fechamento <Tag s={fech.status} />{fech.confirmadoEm && ` em ${fmtData(fech.confirmadoEm.slice(0, 10))}`}</> : 'Sem fechamento salvo'} · <Link className="underline" to={`/anos?ano=${ano}&mes=${mes}`}>ver no ano</Link></div>
+        <div className="ml-auto text-xs text-muted">{fech ? <>Fechamento <Tag s={fech.status} />{fech.confirmadoEm && ` em ${fmtData(fech.confirmadoEm.slice(0, 10))}`}</> : 'Sem fechamento salvo'} · <Link className="underline" to={`/patrimonio/anos?ano=${ano}&mes=${mes}`}>ver no ano</Link></div>
       </div>
 
       <h1 className="text-lg font-semibold">Atualizar {nomeMes(mes)} de {ano}</h1>
@@ -187,7 +186,7 @@ export function AtualizarMes() {
           <Campo rotulo="Proventos do mês (R$)" dica="total, se preferir informar consolidado"><input className="input" inputMode="decimal" value={proventosCons} onChange={(e) => setProventosCons(e.target.value)} /></Campo>
           <label className="flex items-center gap-2 text-sm self-end pb-2"><input type="checkbox" checked={movsConf} onChange={(e) => setMovsConf(e.target.checked)} /> Movimentações do mês conferidas (não houve outras além das registradas)</label>
         </div>
-        <p className="text-xs text-muted mt-2">Dica: em <Link className="underline" to="/dados#financas">Dados → Finanças</Link> você pode importar o aporte líquido do mês a partir dos lançamentos de investimento/resgate do app Finanças.</p>
+        <p className="text-xs text-muted mt-2">Dica: em <Link className="underline" to="/patrimonio/dados#financas">Dados → Finanças</Link> você pode importar o aporte líquido do mês a partir dos lançamentos de investimento/resgate do app Finanças.</p>
       </Card>
 
       {(base.contas.length > 0 || base.dividas.length > 0) && (

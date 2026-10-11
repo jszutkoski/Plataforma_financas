@@ -41,7 +41,7 @@ export function Anos() {
           {anos.map((a) => <button key={a} role="tab" aria-selected={a === ano} onClick={() => irPara(a, null)} className={`rounded-md px-3 py-1 text-sm font-medium ${a === ano ? 'bg-renda text-white' : 'bg-surface-2 text-ink hover:bg-renda/15'}`}>{a}</button>)}
         </div>
         <button className="btn-ghost !px-2 !py-1" onClick={() => idx < anos.length - 1 && irPara(anos[idx + 1], null)} disabled={idx >= anos.length - 1} aria-label="Próximo ano">›</button>
-        <Link to={`/atualizar?ano=${ano}${mes ? `&mes=${mes}` : ''}`} className="btn-primary ml-auto !py-1">Atualizar mês</Link>
+        <Link to={`/patrimonio/atualizar?ano=${ano}${mes ? `&mes=${mes}` : ''}`} className="btn-primary ml-auto !py-1">Atualizar mês</Link>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
@@ -153,7 +153,7 @@ function MesDetalhe({ ano, mes, resumo, linhas, onAtivo }: { ano: number; mes: n
   const visiveis = linhas.filter((l) => !naoVigentes.includes(l))
   return (
     <Card title={`${nomeMes(mes)} de ${ano}`} subtitle={<>Situação: <Tag s={resumo.situacao} />{resumo.fechamento && <> · fechamento <Tag s={resumo.fechamento.status} /></>}{resumo.saldoFinalInfo.dataPosicao && <> · saldo observado em {fmtData(resumo.saldoFinalInfo.dataPosicao)}</>}{resumo.saldoFinalInfo.origem && <> · origem {resumo.saldoFinalInfo.origem}</>}</>}
-      actions={<Link to={`/atualizar?ano=${ano}&mes=${mes}`} className="btn-ghost !py-1">Editar este mês</Link>}>
+      actions={<Link to={`/patrimonio/atualizar?ano=${ano}&mes=${mes}`} className="btn-ghost !py-1">Editar este mês</Link>}>
       {resumo.pendencias.length > 0 && <Aviso tipo="alerta"><strong>Pendências:</strong> {resumo.pendencias.join(' · ')}</Aviso>}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 my-3 text-sm">
         <Mini rotulo="Saldo inicial" v={resumo.saldoInicial} /><Mini rotulo="Aplicações" v={resumo.aportes} /><Mini rotulo="Resgates" v={resumo.resgates} /><Mini rotulo="Proventos" v={resumo.proventos} />
