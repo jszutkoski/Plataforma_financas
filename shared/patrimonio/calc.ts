@@ -397,6 +397,27 @@ export interface Patrimonio {
   dataReferencia: string | null
 }
 
+/**
+ * Conta encerrada ou dívida quitada continua no histórico até a data informada; sem data, até o último
+ * saldo registrado. Antes, a simples mudança de situação apagava o item de TODOS os meses passados.
+ */
+function encerradoAte(data: string | null | undefined, ultimoMesComSaldo: string | null, ano: number, mes: number): boolean {
+  if (data) return data <= fimDoMes(ano, mes)
+  return ultimoMesComSaldo == null || ultimoMesComSaldo < chaveMes(ano, mes)
+}
+/** A conta compõe o patrimônio no mês? (ativa, ou encerrada depois dele) */
+export function contaVigente(b: Base, c: Conta, ano: number, mes: number): boolean {
+  if (c.ativo) return true
+  const ultimo = b.saldosConta.filter((s) => s.contaId === c.id).map((s) => chaveMes(s.ano, s.mes)).sort().at(-1) ?? null
+  return !encerradoAte(c.dataEncerramento, ultimo, ano, mes)
+}
+/** A dívida é descontada no mês? (ativa, ou quitada depois dele) */
+export function dividaVigente(b: Base, d: Divida, ano: number, mes: number): boolean {
+  if (d.situacao === 'ativa') return true
+  const ultimo = b.saldosDivida.filter((s) => s.dividaId === d.id).map((s) => s.data.slice(0, 7)).sort().at(-1) ?? null
+  return !encerradoAte(d.dataQuitacao, ultimo, ano, mes)
+}
+
 export function patrimonioEm(b: Base, ix: Indices, ano: number, mes: number): Patrimonio {
   const lim = fimDoMes(ano, mes)
   const k = chaveMes(ano, mes)
@@ -404,7 +425,7 @@ export function patrimonioEm(b: Base, ix: Indices, ano: number, mes: number): Pa
   let contas = 0, temConta = false
   const contasDetalhe: Patrimonio['contasDetalhe'] = []
   let semConta = 0
-  for (const c of b.contas.filter((c) => c.ativo)) {
+  for (const c of b.contas.filter((c) => contaVigente(b, c, ano, mes))) {
     const s = b.saldosConta.filter((s) => s.contaId === c.id && chaveMes(s.ano, s.mes) <= k).sort((x, y) => chaveMes(y.ano, y.mes).localeCompare(chaveMes(x.ano, x.mes)))[0]
     if (s) { contas += s.saldo; temConta = true; contasDetalhe.push({ conta: c, saldo: s.saldo, data: s.data ?? `${chaveMes(s.ano, s.mes)}` }) } else semConta++
   }
@@ -423,7 +444,7 @@ export function patrimonioEm(b: Base, ix: Indices, ano: number, mes: number): Pa
   }
   let dividas = 0, semDiv = 0
   const dividasDetalhe: Patrimonio['dividasDetalhe'] = []
-  for (const d of b.dividas.filter((d) => d.situacao === 'ativa')) {
+  for (const d of b.dividas.filter((d) => dividaVigente(b, d, ano, mes))) {
     if (d.dataInicio && d.dataInicio > lim) continue
     const s = b.saldosDivida.filter((s) => s.dividaId === d.id && s.data <= lim).sort((x, y) => y.data.localeCompare(x.data))[0] ?? null
     if (s) { dividas += s.saldoDevedor; dividasDetalhe.push({ divida: d, saldo: s }) } else { semDiv++; dividasDetalhe.push({ divida: d, saldo: null }) }

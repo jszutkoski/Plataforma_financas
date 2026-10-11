@@ -37,14 +37,14 @@ export function validar(t: NomeTabela, o: Obj): string[] {
       if (!['externo', 'interno', 'nao_informado'].includes(o.origemRecurso as string)) e.push('origemRecurso inválida.')
       if (o.ano != null && !mesOk(o)) e.push('ano/mês inválidos.'); break
     case 'fluxosConsolidados': if (!mesOk(o)) e.push('ano/mês inválidos.'); numOpc('aportesLiquidos'); numOpc('proventos'); break
-    case 'contas': texto('nome'); break
+    case 'contas': texto('nome'); dataOpc('dataEncerramento'); break
     case 'saldosConta': texto('contaId'); if (!mesOk(o)) e.push('ano/mês inválidos.'); if (!num(o.saldo)) e.push('saldo obrigatório.'); dataOpc('data'); break
     case 'bens':
       texto('nome'); if (!['imovel', 'veiculo', 'outro'].includes(o.categoria as string)) e.push('categoria inválida.')
       if (!num(o.percentualPropriedade) || o.percentualPropriedade <= 0 || o.percentualPropriedade > 1) e.push('percentualPropriedade: entre 0 e 100%.')
       dataOpc('dataAquisicao'); dataOpc('dataVenda'); numOpc('valorAquisicao', 0); numOpc('valorVenda', 0); numOpc('area', 0); break
     case 'avaliacoesBem': texto('bemId'); if (!dataOk(o.data)) e.push('data inválida.'); if (!num(o.valor) || o.valor < 0) e.push('valor obrigatório.'); texto('fonte'); break
-    case 'dividas': texto('nome'); dataOpc('dataInicio'); dataOpc('vencimento'); if (o.dataInicio && o.vencimento && (o.dataInicio as string) > (o.vencimento as string)) e.push('vencimento anterior à data de início.'); break
+    case 'dividas': texto('nome'); dataOpc('dataInicio'); dataOpc('vencimento'); dataOpc('dataQuitacao'); if (o.dataInicio && o.vencimento && (o.dataInicio as string) > (o.vencimento as string)) e.push('vencimento anterior à data de início.'); break
     case 'saldosDivida': texto('dividaId'); if (!dataOk(o.data)) e.push('data inválida.'); if (!num(o.saldoDevedor) || o.saldoDevedor < 0) e.push('saldoDevedor obrigatório.'); break
     case 'fechamentos': if (!mesOk(o)) e.push('ano/mês inválidos.'); break
     case 'pendencias': texto('descricao'); break

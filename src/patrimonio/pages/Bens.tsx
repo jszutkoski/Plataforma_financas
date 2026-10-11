@@ -142,10 +142,10 @@ function AvaliacaoForm({ bem, onFechar, onSalvo }: { bem: Bem; onFechar: () => v
 
 function DividaForm({ divida, bens, onFechar, onSalvo }: { divida?: Divida; bens: Bem[]; onFechar: () => void; onSalvo: () => void }) {
   const { aviso } = useStore()
-  const [f, setF] = useState({ nome: divida?.nome ?? '', instituicao: divida?.instituicao ?? '', tipo: divida?.tipo ?? '', dataInicio: divida?.dataInicio ?? '', vencimento: divida?.vencimento ?? '', bemId: divida?.bemId ?? '', situacao: divida?.situacao ?? 'ativa', observacoes: divida?.observacoes ?? '', saldo: '', data: hojeISO() })
+  const [f, setF] = useState({ nome: divida?.nome ?? '', instituicao: divida?.instituicao ?? '', tipo: divida?.tipo ?? '', dataInicio: divida?.dataInicio ?? '', vencimento: divida?.vencimento ?? '', bemId: divida?.bemId ?? '', situacao: divida?.situacao ?? 'ativa', dataQuitacao: divida?.dataQuitacao ?? '', observacoes: divida?.observacoes ?? '', saldo: '', data: hojeISO() })
   const set = (k: keyof typeof f, v: string) => setF({ ...f, [k]: v })
   const salvar = async () => {
-    const item = { nome: f.nome, instituicao: f.instituicao || null, tipo: f.tipo || null, dataInicio: f.dataInicio || null, vencimento: f.vencimento || null, bemId: f.bemId || null, situacao: f.situacao as Divida['situacao'], observacoes: f.observacoes || null }
+    const item = { nome: f.nome, instituicao: f.instituicao || null, tipo: f.tipo || null, dataInicio: f.dataInicio || null, vencimento: f.vencimento || null, bemId: f.bemId || null, situacao: f.situacao as Divida['situacao'], dataQuitacao: f.situacao === 'quitada' ? f.dataQuitacao || null : null, observacoes: f.observacoes || null }
     try {
       const salvo = divida ? await api.atualizar<Divida>('dividas', divida.id, item) : await api.criar<Divida>('dividas', item)
       const sd = n(f.saldo)
@@ -163,6 +163,7 @@ function DividaForm({ divida, bens, onFechar, onSalvo }: { divida?: Divida; bens
       <Campo rotulo="Bem relacionado"><select className="input" value={f.bemId} onChange={(e) => set('bemId', e.target.value)}><option value="">—</option>{bens.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></Campo>
       {!divida && <><Campo rotulo="Saldo devedor atual (minha responsabilidade)"><input className="input" inputMode="decimal" value={f.saldo} onChange={(e) => set('saldo', e.target.value)} /></Campo><Campo rotulo="Data da posição"><input className="input" type="date" value={f.data} onChange={(e) => set('data', e.target.value)} /></Campo></>}
       <Campo rotulo="Situação"><select className="input" value={f.situacao} onChange={(e) => set('situacao', e.target.value)}><option value="ativa">Ativa</option><option value="quitada">Quitada</option></select></Campo>
+      {f.situacao === 'quitada' && <Campo rotulo="Data da quitação" dica="até esta data a dívida continua no histórico; vazio = até o último saldo registrado"><input className="input" type="date" value={f.dataQuitacao} onChange={(e) => set('dataQuitacao', e.target.value)} /></Campo>}
       <Campo rotulo="Observações" className="sm:col-span-2"><textarea className="input" rows={2} value={f.observacoes} onChange={(e) => set('observacoes', e.target.value)} /></Campo>
     </Form>
   )
@@ -183,8 +184,8 @@ function SaldoDividaForm({ divida, onFechar, onSalvo }: { divida: Divida; onFech
 
 function ContaForm({ conta, financas, onFechar, onSalvo }: { conta?: Conta; financas: string[]; onFechar: () => void; onSalvo: () => void }) {
   const { aviso } = useStore()
-  const [f, setF] = useState({ nome: conta?.nome ?? '', instituicao: conta?.instituicao ?? '', tipo: conta?.tipo ?? 'corrente', financasNome: conta?.financasNome ?? '', ativo: conta?.ativo ?? true, observacoes: conta?.observacoes ?? '' })
-  const salvar = async () => { try { const item = { nome: f.nome, instituicao: f.instituicao || null, tipo: f.tipo as Conta['tipo'], financasNome: f.financasNome || null, ativo: f.ativo, observacoes: f.observacoes || null }; if (conta) await api.atualizar('contas', conta.id, item); else await api.criar('contas', item); aviso('Conta salva.'); onSalvo() } catch (e) { aviso((e as Error).message, 'erro') } }
+  const [f, setF] = useState({ nome: conta?.nome ?? '', instituicao: conta?.instituicao ?? '', tipo: conta?.tipo ?? 'corrente', financasNome: conta?.financasNome ?? '', ativo: conta?.ativo ?? true, dataEncerramento: conta?.dataEncerramento ?? '', observacoes: conta?.observacoes ?? '' })
+  const salvar = async () => { try { const item = { nome: f.nome, instituicao: f.instituicao || null, tipo: f.tipo as Conta['tipo'], financasNome: f.financasNome || null, ativo: f.ativo, dataEncerramento: f.ativo ? null : f.dataEncerramento || null, observacoes: f.observacoes || null }; if (conta) await api.atualizar('contas', conta.id, item); else await api.criar('contas', item); aviso('Conta salva.'); onSalvo() } catch (e) { aviso((e as Error).message, 'erro') } }
   return (
     <Form titulo={conta ? `Editar ${conta.nome}` : 'Nova conta'} onFechar={onFechar} onSalvar={salvar} ok={!!f.nome.trim()}>
       <Campo rotulo="Nome"><input className="input" value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} /></Campo>
@@ -192,6 +193,7 @@ function ContaForm({ conta, financas, onFechar, onSalvo }: { conta?: Conta; fina
       <Campo rotulo="Tipo"><select className="input" value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value as Conta['tipo'] })}><option value="corrente">Conta corrente</option><option value="poupanca">Poupança</option><option value="corretora">Conta na corretora</option><option value="dinheiro">Dinheiro</option><option value="outro">Outro</option></select></Campo>
       <Campo rotulo="Conta correspondente no Finanças" dica={financas.length ? 'lista lida do banco do Finanças' : 'Finanças não encontrado'}><input className="input" list="fin-contas" value={f.financasNome} onChange={(e) => setF({ ...f, financasNome: e.target.value })} /><datalist id="fin-contas">{financas.map((c) => <option key={c} value={c} />)}</datalist></Campo>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.ativo} onChange={(e) => setF({ ...f, ativo: e.target.checked })} /> Conta ativa</label>
+      {!f.ativo && <Campo rotulo="Data de encerramento" dica="até esta data a conta continua no histórico; vazio = até o último saldo registrado"><input className="input" type="date" value={f.dataEncerramento} onChange={(e) => setF({ ...f, dataEncerramento: e.target.value })} /></Campo>}
       <Campo rotulo="Observações"><input className="input" value={f.observacoes} onChange={(e) => setF({ ...f, observacoes: e.target.value })} /></Campo>
     </Form>
   )

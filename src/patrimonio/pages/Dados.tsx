@@ -46,7 +46,7 @@ export function Dados() {
           <label className="btn-ghost cursor-pointer">Restaurar (substituir)<input type="file" accept=".json" className="hidden" onChange={(e) => { lerBackup(e.target.files?.[0] ?? null, 'substituir'); e.target.value = '' }} /></label>
           <label className="btn-ghost cursor-pointer">Restaurar (mesclar)<input type="file" accept=".json" className="hidden" onChange={(e) => { lerBackup(e.target.files?.[0] ?? null, 'mesclar'); e.target.value = '' }} /></label>
         </div>
-        <p className="text-xs text-muted mt-2">"Substituir" apaga a base atual antes de restaurar; "mesclar" só insere registros cujo id ainda não existe. Ambos pedem confirmação.</p>
+        <p className="text-xs text-muted mt-2">"Substituir" apaga a base atual antes de restaurar; "mesclar" só acrescenta o que ainda não existe — um registro do backup para um mês/ativo que já tem dado aqui é ignorado, nunca sobrescreve. Ambos pedem confirmação.</p>
       </Card>
 
       <Card title="Exportar tabelas (CSV)">

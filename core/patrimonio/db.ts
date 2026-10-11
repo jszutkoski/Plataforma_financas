@@ -25,11 +25,11 @@ export const TABELAS: Record<string, Tabela> = {
   posicoesConsolidadas: { nome: 'posicoes_consolidadas', colunas: ['ano', 'mes', 'escopo', 'categoria', 'saldo', 'dataPosicao', 'situacao', 'origem', 'origemArquivo', 'observacoes'], unico: ['ano', 'mes', 'escopo', 'categoria'] },
   movimentacoes: { nome: 'movimentacoes', colunas: ['investimentoId', 'tipo', 'data', 'ano', 'mes', 'valor', 'quantidade', 'preco', 'taxas', 'irrf', 'origemRecurso', 'contaId', 'foraDaPosicao', 'observacoes', 'origem', 'origemArquivo', 'situacao', 'financasId'], bool: ['foraDaPosicao'], indices: [['ano', 'mes'], ['investimentoId']] },
   fluxosConsolidados: { nome: 'fluxos_consolidados', colunas: ['ano', 'mes', 'aportesLiquidos', 'proventos', 'proventosSituacao', 'resultadoInformado', 'resultadoExcluiProventos', 'retornoInformado', 'ibov', 'ajuste', 'ajusteMotivo', 'origem', 'origemArquivo', 'financasIds', 'observacoes'], json: ['financasIds'], bool: ['resultadoExcluiProventos'], unico: ['ano', 'mes'] },
-  contas: { nome: 'contas', colunas: ['nome', 'instituicao', 'tipo', 'financasNome', 'ativo', 'observacoes'], bool: ['ativo'] },
+  contas: { nome: 'contas', colunas: ['nome', 'instituicao', 'tipo', 'financasNome', 'ativo', 'dataEncerramento', 'observacoes'], bool: ['ativo'] },
   saldosConta: { nome: 'saldos_conta', colunas: ['contaId', 'ano', 'mes', 'data', 'saldo', 'situacao', 'origem', 'observacoes'], unico: ['contaId', 'ano', 'mes'] },
   bens: { nome: 'bens', colunas: ['nome', 'categoria', 'dataAquisicao', 'valorAquisicao', 'percentualPropriedade', 'localizacao', 'area', 'marca', 'modelo', 'anoFabricacao', 'dividaId', 'situacao', 'dataVenda', 'valorVenda', 'observacoes'] },
   avaliacoesBem: { nome: 'avaliacoes_bem', colunas: ['bemId', 'data', 'valor', 'fonte', 'observacoes'] },
-  dividas: { nome: 'dividas', colunas: ['nome', 'instituicao', 'tipo', 'dataInicio', 'vencimento', 'bemId', 'situacao', 'observacoes'] },
+  dividas: { nome: 'dividas', colunas: ['nome', 'instituicao', 'tipo', 'dataInicio', 'vencimento', 'bemId', 'situacao', 'dataQuitacao', 'observacoes'] },
   saldosDivida: { nome: 'saldos_divida', colunas: ['dividaId', 'data', 'ano', 'mes', 'saldoDevedor', 'origem', 'observacoes'] },
   fechamentos: { nome: 'fechamentos', colunas: ['ano', 'mes', 'status', 'movimentacoesConfirmadas', 'observacoes', 'confirmadoEm'], bool: ['movimentacoesConfirmadas'], unico: ['ano', 'mes'] },
   alteracoes: { nome: 'alteracoes', colunas: ['data', 'entidade', 'entidadeId', 'descricao', 'antes', 'depois', 'motivo', 'periodosAfetados'], json: ['antes', 'depois', 'periodosAfetados'] },
@@ -96,14 +96,36 @@ export function obter<T>(nome: NomeTabela, id: string): T | null {
   return r ? (paraObj(t, r) as T) : null
 }
 /** Insere ou substitui (upsert por id). Preserva criado_em quando o registro já existe. */
+/** Valor como gravado no SQLite (mesma conversão de paraRow), para comparar chaves. */
+const valorSql = (v: unknown): string | number | null => (v == null ? null : typeof v === 'number' ? (Number.isFinite(v) ? v : null) : typeof v === 'boolean' ? (v ? 1 : 0) : String(v))
+
+/** id do registro que já ocupa a chave natural do item (ex.: mesmo ativo e mês), se a tabela tiver uma. */
+export function idPorChave(nome: NomeTabela, item: Obj): string | null {
+  const t = TABELAS[nome]
+  if (!t.unico) return null
+  const r = db.prepare(`SELECT id FROM ${t.nome} WHERE ${t.unico.map((c) => `${snake(c)} IS ?`).join(' AND ')}`).get(...t.unico.map((c) => valorSql(item[c]))) as Row | undefined
+  return r ? (r.id as string) : null
+}
+
+/**
+ * Insere ou atualiza pelo id, preservando criado_em. Nunca apaga outro registro: se a chave natural
+ * (ex.: ativo + mês) já pertence a OUTRO registro, uma edição é recusada; uma criação atualiza o registro existente.
+ */
 export function salvar<T = Obj>(nome: NomeTabela, item: Obj, opts: { prefixo?: string; criadoEm?: string } = {}): T {
   const t = TABELAS[nome]
   const now = new Date().toISOString()
-  const id = (item.id as string) || newId(opts.prefixo ?? nome.slice(0, 3))
-  const existente = db.prepare(`SELECT criado_em FROM ${t.nome} WHERE id = ?`).get(id) as Row | undefined
+  let id = (item.id as string) || newId(opts.prefixo ?? nome.slice(0, 3))
+  let existente = db.prepare(`SELECT criado_em FROM ${t.nome} WHERE id = ?`).get(id) as Row | undefined
+  const ocupante = idPorChave(nome, item)
+  if (ocupante && ocupante !== id) {
+    if (existente) throw new Error(`Já existe outro registro de ${nome} com ${t.unico!.join(' / ')} = ${t.unico!.map((c) => String(item[c] ?? '—')).join(' / ')}. Nada foi alterado.`)
+    id = ocupante
+    existente = db.prepare(`SELECT criado_em FROM ${t.nome} WHERE id = ?`).get(id) as Row | undefined
+  }
   const criado = (existente?.criado_em as string) ?? opts.criadoEm ?? now
   const cols = ['id', ...t.colunas.map(snake), 'criado_em', 'atualizado_em']
-  db.prepare(`INSERT OR REPLACE INTO ${t.nome} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(id, ...paraRow(t, item), criado, now)
+  const atualizar = [...t.colunas.map(snake), 'atualizado_em'].map((c) => `${c} = excluded.${c}`).join(', ')
+  db.prepare(`INSERT INTO ${t.nome} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')}) ON CONFLICT(id) DO UPDATE SET ${atualizar}`).run(id, ...paraRow(t, item), criado, now)
   return obter<T>(nome, id)!
 }
 export function excluir(nome: NomeTabela, id: string): boolean {
@@ -152,6 +174,7 @@ export function gerarBackup(): Backup {
 export function restaurarBackup(b: Backup, modo: 'substituir' | 'mesclar'): Record<string, number> {
   if (b?.versao !== 2 || b.app !== 'patrimonio') throw new Error('Arquivo de backup inválido (esperado versão 2 do app Patrimônio).')
   const n: Record<string, number> = {}
+  let conflitos = 0
   transacao(() => {
     if (modo === 'substituir') for (const t of Object.values(TABELAS)) db.exec(`DELETE FROM ${t.nome}`)
     for (const nome of Object.keys(TABELAS) as NomeTabela[]) {
@@ -159,10 +182,13 @@ export function restaurarBackup(b: Backup, modo: 'substituir' | 'mesclar'): Reco
       n[nome] = 0
       for (const it of itens) {
         if (modo === 'mesclar' && obter(nome, it.id as string)) continue
+        // mesclar só acrescenta: um registro do backup para um mês/ativo que já tem dado aqui é ignorado, nunca sobrescreve
+        if (modo === 'mesclar' && idPorChave(nome, it)) { conflitos++; continue }
         salvar(nome, it, { criadoEm: it.criadoEm as string | undefined }); n[nome]++
       }
     }
   })
+  if (conflitos) n['ignorados por já existirem (mesmo mês/ativo)'] = conflitos
   return n
 }
 

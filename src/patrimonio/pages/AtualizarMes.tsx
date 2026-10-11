@@ -6,7 +6,7 @@ import { Card, Valor, Tag, Campo, Aviso, Modal, Confirm } from '@pat/components/
 import { InvestimentoForm } from '@pat/components/InvestimentoForm'
 import { fmtBRL, fmtData, fmtMesAno, fmtQtd, nomeMes, parseValorBR } from '@pat/lib/format'
 import { CATEGORIA_LABEL, MESES, chaveMes, mesAnterior, mesSeguinte, type Investimento, type Movimentacao, type OrigemRecurso } from '@pat-shared/types'
-import { resumoMes, saldoCarteira, vigenteNoMes, quantidadeAte } from '@pat-shared/calc'
+import { resumoMes, saldoCarteira, vigenteNoMes, quantidadeAte, contaVigente, dividaVigente } from '@pat-shared/calc'
 
 interface Linha {
   inv: Investimento
@@ -33,6 +33,9 @@ export function AtualizarMes() {
   const rm = useMemo(() => resumoMes(base, ix, ano, mes), [base, ix, ano, mes])
   const ant = useMemo(() => saldoCarteira(base, ix, aa, ma), [base, ix, aa, ma])
   const consol = ix.consCarteira.get(k) ?? null
+  // contas e dívidas que existiam neste mês (inclusive as encerradas/quitadas depois)
+  const contasDoMes = base.contas.filter((c) => contaVigente(base, c, ano, mes))
+  const dividasDoMes = base.dividas.filter((d) => dividaVigente(base, d, ano, mes))
 
   const [linhas, setLinhas] = useState<Linha[]>([])
   const [totalCarteira, setTotalCarteira] = useState('')
@@ -190,8 +193,8 @@ export function AtualizarMes() {
       {(base.contas.length > 0 || base.dividas.length > 0) && (
         <Card title="Contas e dívidas" subtitle="Saldos no fechamento do mês (opcional; compõem o patrimônio total).">
           <div className="grid md:grid-cols-2 gap-4">
-            {base.contas.filter((c) => c.ativo).length > 0 && <div><div className="label">Contas (dinheiro disponível)</div>{base.contas.filter((c) => c.ativo).map((c) => <div key={c.id} className="flex items-center gap-2 mb-1 text-sm"><span className="flex-1">{c.nome}</span><input className="input-cell w-32" inputMode="decimal" value={contas[c.id] ?? ''} onChange={(e) => setContas({ ...contas, [c.id]: e.target.value })} placeholder="saldo" /></div>)}</div>}
-            {base.dividas.filter((d) => d.situacao === 'ativa').length > 0 && <div><div className="label">Dívidas (saldo devedor de minha responsabilidade)</div>{base.dividas.filter((d) => d.situacao === 'ativa').map((d) => <div key={d.id} className="flex items-center gap-2 mb-1 text-sm"><span className="flex-1">{d.nome}</span><input className="input-cell w-32" inputMode="decimal" value={dividas[d.id] ?? ''} onChange={(e) => setDividas({ ...dividas, [d.id]: e.target.value })} placeholder="saldo devedor" /></div>)}</div>}
+            {contasDoMes.length > 0 && <div><div className="label">Contas (dinheiro disponível)</div>{contasDoMes.map((c) => <div key={c.id} className="flex items-center gap-2 mb-1 text-sm"><span className="flex-1">{c.nome}</span><input className="input-cell w-32" inputMode="decimal" value={contas[c.id] ?? ''} onChange={(e) => setContas({ ...contas, [c.id]: e.target.value })} placeholder="saldo" /></div>)}</div>}
+            {dividasDoMes.length > 0 && <div><div className="label">Dívidas (saldo devedor de minha responsabilidade)</div>{dividasDoMes.map((d) => <div key={d.id} className="flex items-center gap-2 mb-1 text-sm"><span className="flex-1">{d.nome}</span><input className="input-cell w-32" inputMode="decimal" value={dividas[d.id] ?? ''} onChange={(e) => setDividas({ ...dividas, [d.id]: e.target.value })} placeholder="saldo devedor" /></div>)}</div>}
           </div>
         </Card>
       )}

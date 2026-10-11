@@ -163,6 +163,8 @@ export interface Conta {
   /** Nome da conta correspondente no app Finanças (mesmo identificador lógico). */
   financasNome: string | null
   ativo: boolean
+  /** Conta inativa: a partir desta data deixa de compor o patrimônio (antes dela, o histórico é mantido). */
+  dataEncerramento?: string | null
   observacoes: string | null
   criadoEm: string
   atualizadoEm: string
@@ -234,6 +236,8 @@ export interface Divida {
   vencimento: string | null
   bemId: string | null
   situacao: 'ativa' | 'quitada'
+  /** Dívida quitada: a partir desta data deixa de ser descontada (antes dela, o histórico é mantido). */
+  dataQuitacao?: string | null
   observacoes: string | null
   criadoEm: string
   atualizadoEm: string
