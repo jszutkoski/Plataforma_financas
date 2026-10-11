@@ -4,11 +4,11 @@ import { TIPOS, TIPO_LABEL, GRUPOS_DESPESA } from '@fin-shared/types'
 import { useStore } from '@fin/lib/store'
 import { usePeriodo } from '@fin/lib/periodo'
 import { api } from '@fin/lib/api'
-import { fmtBRL, parseValorBR, competencia } from '@fin/lib/format'
+import { fmtBRL, parseValorBR, competencia, hojeISO } from '@fin/lib/format'
 import { Card, Campo, Confirm, Modal, Vazio } from '@fin/components/ui'
 import { FORMAS } from '@fin/components/LancamentoForm'
 
-const vazia = (): Omit<Recorrencia, 'id'> => ({ descricao: '', valor: 0, tipo: 'despesa', grupo: 'Fixas', categoria: null, subcategoria: null, conta: null, formaPagamento: null, dia: 1, inicio: new Date().toISOString().slice(0, 7), fim: null, observacoes: null, ativo: true })
+const vazia = (): Omit<Recorrencia, 'id'> => ({ descricao: '', valor: 0, tipo: 'despesa', grupo: 'Fixas', categoria: null, subcategoria: null, conta: null, formaPagamento: null, dia: 1, inicio: hojeISO().slice(0, 7), fim: null, observacoes: null, ativo: true })
 
 export function Recorrentes() {
   const { recorrencias, categorias, contas, lancamentos, recarregar, aviso } = useStore()

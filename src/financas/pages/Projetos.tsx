@@ -70,7 +70,7 @@ export function Projetos() {
     const { editar, f } = formCusto
     const valor = Number(String(f.valor).replace(',', '.'))
     const base: LancamentoInput = editar
-      ? { ...editar, data: f.data, descricao: f.descricao.trim(), subcategoria: f.secao.trim() || null, valor, tipo: f.tipo, observacoes: f.observacoes.trim() || null, foraDoFluxo: true, ledger: projeto.nome }
+      ? { ...editar, ano: undefined, mes: undefined, data: f.data, descricao: f.descricao.trim(), subcategoria: f.secao.trim() || null, valor, tipo: f.tipo, observacoes: f.observacoes.trim() || null, foraDoFluxo: true, ledger: projeto.nome }
       : { data: f.data, descricao: f.descricao.trim(), tipo: f.tipo, valor, grupo: null, categoria: null, subcategoria: f.secao.trim() || null, conta: null, formaPagamento: null, parcela: null, totalParcelas: null,
           observacoes: f.observacoes.trim() || null, origem: 'manual', origemArquivo: null, diaConhecido: true, foraDoFluxo: true, ledger: projeto.nome, recorrenciaId: null }
     try {

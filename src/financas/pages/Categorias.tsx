@@ -110,7 +110,13 @@ export function Categorias() {
       </Card>
       <Confirm aberto={!!excluir} titulo="Excluir categoria" perigoso confirmar="Excluir mesmo assim" onCancelar={() => setExcluir(null)}
         onConfirmar={() => { if (!excluir) return; void run(() => api.excluirCategoria(excluir.id, true), 'Categoria excluída.'); setExcluir(null) }}
-        mensagem={<>Excluir <strong>{excluir?.nome}</strong>{excluir?.parentId == null ? ' e suas subcategorias' : ''}? Os lançamentos existentes mantêm o nome antigo como texto, mas a categoria deixa de aparecer nas listas.</>} />
+        mensagem={(() => {
+          if (!excluir) return null
+          const pai = excluir.parentId == null ? null : categorias.find((c) => c.id === excluir.parentId)
+          const n = (pai ? uso.get(`s|${excluir.tipo}|${pai.nome}|${excluir.nome}`) : uso.get(`c|${excluir.tipo}|${excluir.nome}`))?.n ?? 0
+          return <>Excluir <strong>{excluir.nome}</strong>{excluir.parentId == null ? ' e suas subcategorias' : ''}?{' '}
+            {n > 0 ? <><strong>{n} lançamento(s)</strong> usam esta {pai ? 'subcategoria' : 'categoria'} e continuarão com esse nome, que deixa de aparecer nas listas. Para levá-los a outra, cancele e use <em>Renomear</em> com o nome da categoria de destino (as duas são mescladas).</> : 'Nenhum lançamento a usa.'}</>
+        })()} />
     </div>
   )
 }

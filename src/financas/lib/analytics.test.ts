@@ -27,3 +27,12 @@ test('FIN-013: subcategorias homônimas de categorias diferentes não se somam',
   const ant = [L({ ano: 2026, mes: 2, data: '2026-02-10', categoria: 'Pets', subcategoria: 'Outros', valor: 50 })]
   assert.equal(variacaoCategorias([...M, ...ant], 2026, 3).find((v) => v.nome === 'Pets › Outros')?.delta, 0)
 })
+
+test('FIN-016: o painel abre no mês atual (ou no último anterior com dados), não numa parcela futura', async () => {
+  const { ultimoMesComDados } = await import('./analytics.ts')
+  const hoje = new Date(2026, 9, 11) // out/2026
+  const M = [L({ ano: 2026, mes: 9 }), L({ ano: 2027, mes: 3, data: '2027-03-10' })]
+  assert.deepEqual(ultimoMesComDados(M, hoje), { ano: 2026, mes: 9 })
+  assert.deepEqual(ultimoMesComDados([L({ ano: 2026, mes: 12 })], hoje), { ano: 2026, mes: 12 }, 'só há meses futuros: abre no mais recente')
+  assert.deepEqual(ultimoMesComDados([L({ ano: 2025, mes: 12 })], hoje), { ano: 2025, mes: 12 })
+})

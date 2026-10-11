@@ -45,6 +45,12 @@ export function Importar() {
   const duplicadas = validas.filter((l) => l.duplicata)
   const aImportar = validas.filter((l) => !(pularDuplicatas && l.duplicata))
   const parecidos = validas.filter((l) => l.parecido)
+  // sugestões da prévia calculadas uma vez por arquivo/mapeamento (cada uma percorre todo o histórico)
+  const sugestoesPrevia = useMemo(() => {
+    const m = new Map<number, ReturnType<typeof sugerirCategoria>>()
+    if (sugerir) for (const l of linhas.slice(0, 300)) if (l.item && !l.item.categoria) m.set(l.indice, sugerirCategoria(lancamentos, l.item.descricao, l.item.tipo))
+    return m
+  }, [linhas, sugerir, lancamentos])
   // totais por tipo do que será gravado: um sinal lido ao contrário aparece aqui antes de importar
   const totaisPrevia = aImportar.reduce((t, l) => {
     const it = l.item!
@@ -118,7 +124,7 @@ export function Importar() {
                   <td className="tnum">{l.item ? fmtData(l.item.data) : String(l.bruto[Object.keys(mapa).find((k) => mapa[k] === 'data') ?? ''] ?? '')}</td>
                   <td className="max-w-[280px] truncate">{l.item?.descricao ?? String(l.bruto[Object.keys(mapa).find((k) => mapa[k] === 'descricao') ?? ''] ?? '')}</td>
                   <td>{l.item ? (l.item.tipo === 'despesa' && l.item.valor < 0 ? 'Estorno' : TIPO_LABEL[l.item.tipo]) : ''}</td>
-                  <td className="text-ink-2">{l.item?.categoria ?? (sugerir && l.item ? <span className="text-muted">{sugerirCategoria(lancamentos, l.item.descricao, l.item.tipo)?.categoria ?? '—'} (sugerida)</span> : '')}</td>
+                  <td className="text-ink-2">{l.item?.categoria ?? (sugerir && l.item ? <span className="text-muted">{sugestoesPrevia.get(l.indice)?.categoria ?? '—'} (sugerida)</span> : '')}</td>
                   <td className="text-right tnum">{l.item ? fmtBRL(l.item.valor) : ''}</td>
                 </tr>))}</tbody>
             </table>{linhas.length > 300 && <p className="text-xs text-muted p-2">Mostrando as primeiras 300 linhas.</p>}</div>

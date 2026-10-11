@@ -60,12 +60,19 @@ export function mesesComDados(L: Lancamento[], ano: number): number[] {
 }
 
 /** Último mês com dados (para seleção inicial). */
-export function ultimoMesComDados(L: Lancamento[]): { ano: number; mes: number } {
+export function ultimoMesComDados(L: Lancamento[], hoje = new Date()): { ano: number; mes: number } {
   const F = noFluxo(L)
-  if (!F.length) { const d = new Date(); return { ano: d.getFullYear(), mes: d.getMonth() + 1 } }
-  let best = { ano: 0, mes: 0 }
-  for (const l of F) if (l.ano > best.ano || (l.ano === best.ano && l.mes > best.mes)) best = { ano: l.ano, mes: l.mes }
-  return best
+  if (!F.length) return { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 }
+  // parcelas e recorrências já lançadas para meses futuros não devem abrir o painel no futuro
+  const atual = hoje.getFullYear() * 12 + hoje.getMonth() + 1
+  let ate = 0, qualquer = 0
+  for (const l of F) {
+    const k = l.ano * 12 + l.mes
+    if (k > qualquer) qualquer = k
+    if (k <= atual && k > ate) ate = k
+  }
+  const k = ate || qualquer
+  return { ano: Math.floor((k - 1) / 12), mes: ((k - 1) % 12) + 1 }
 }
 
 export function mesAnterior(ano: number, mes: number): { ano: number; mes: number } {

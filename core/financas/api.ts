@@ -101,7 +101,7 @@ export function duplicarLancamento({ id, data }: { id: string; data?: string }) 
   const row = db.prepare('SELECT * FROM lancamentos WHERE id = ?').get(id) as Row | undefined
   if (!row) erro('Lançamento não encontrado.')
   const orig = rowToLancamento(row!)
-  return inserirLancamento({ ...orig, id: undefined, data: data ?? orig.data, ano: undefined, mes: undefined, origem: `cópia de ${orig.id}`, origemArquivo: null, recorrenciaId: null, parcelamentoId: null })
+  return inserirLancamento({ ...orig, id: undefined, data: data ?? orig.data, ano: undefined, mes: undefined, origem: `cópia de ${orig.id}`, origemArquivo: null, recorrenciaId: null, parcelamentoId: null, parcela: null, totalParcelas: null })
 }
 
 // ---------- categorias ----------
@@ -253,8 +253,22 @@ export function excluirProjeto({ id }: { id: number }) {
 // ---------- recorrências ----------
 export const recorrencias = () => listarRecorrencias()
 
+const MES_ISO = /^\d{4}-(0[1-9]|1[0-2])$/
+function validarRecorrencia(r: Partial<Recorrencia>): string[] {
+  const e: string[] = []
+  if (!r.descricao?.trim()) e.push('Descrição obrigatória.')
+  if (typeof r.valor !== 'number' || !Number.isFinite(r.valor) || r.valor <= 0) e.push('Valor deve ser maior que zero.')
+  if (!['receita', 'despesa', 'investimento', 'resgate', 'deducao'].includes(r.tipo as string)) e.push('Tipo inválido.')
+  if (r.dia != null && (!Number.isInteger(r.dia) || r.dia < 1 || r.dia > 31)) e.push('Dia do mês deve estar entre 1 e 31.')
+  if (!r.inicio || !MES_ISO.test(r.inicio)) e.push('Início inválido (use AAAA-MM).')
+  if (r.fim != null && !MES_ISO.test(r.fim)) e.push('Fim inválido (use AAAA-MM).')
+  else if (r.fim && r.inicio && r.fim < r.inicio) e.push('O fim não pode ser antes do início.')
+  return e
+}
+
 export function criarRecorrencia(r: Recorrencia) {
-  if (!r.descricao?.trim() || !(r.valor > 0) || !r.tipo || !r.inicio) erro('Descrição, valor, tipo e início são obrigatórios.')
+  const erros = validarRecorrencia(r)
+  if (erros.length) errosDeValidacao(erros)
   const id = newId('rec')
   db.prepare(`INSERT INTO recorrencias (id, descricao, valor, tipo, grupo, categoria, subcategoria, conta, forma_pagamento, dia, inicio, fim, observacoes, ativo)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)`).run(id, r.descricao.trim(), r.valor, r.tipo, r.grupo ?? null, r.categoria ?? null, r.subcategoria ?? null,
@@ -263,8 +277,11 @@ export function criarRecorrencia(r: Recorrencia) {
 }
 
 export function atualizarRecorrencia({ id, r }: { id: string; r: Recorrencia }) {
-  const ex = db.prepare('SELECT * FROM recorrencias WHERE id = ?').get(id)
+  const ex = db.prepare('SELECT * FROM recorrencias WHERE id = ?').get(id) as Row | undefined
   if (!ex) erro('Recorrência não encontrada.')
+  r = { ...rowToRecorrencia(ex!), ...r }
+  const erros = validarRecorrencia(r)
+  if (erros.length) errosDeValidacao(erros)
   db.prepare(`UPDATE recorrencias SET descricao=?, valor=?, tipo=?, grupo=?, categoria=?, subcategoria=?, conta=?, forma_pagamento=?, dia=?, inicio=?, fim=?, observacoes=?, ativo=? WHERE id=?`)
     .run(r.descricao.trim(), r.valor, r.tipo, r.grupo ?? null, r.categoria ?? null, r.subcategoria ?? null, r.conta ?? null, r.formaPagamento ?? null,
       r.dia || 1, r.inicio, r.fim ?? null, r.observacoes ?? null, r.ativo === false ? 0 : 1, id)
