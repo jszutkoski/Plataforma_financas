@@ -27,6 +27,7 @@ export interface Base {
 }
 
 export const r2 = (v: number): number => Math.round(v * 100) / 100
+const moeda = (v: number): string => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fimDoMes = (ano: number, mes: number): string => `${chaveMes(ano, mes)}-${new Date(ano, mes, 0).getDate()}`
 const cmp = (a: number, m1: number, b: number, m2: number): number => a * 12 + m1 - (b * 12 + m2)
 
@@ -224,6 +225,7 @@ export function resumoMes(b: Base, ix: Indices, ano: number, mes: number): Resum
   let aportes: number | null = null, resgates: number | null = null, liq: number | null = null, fonte: ResumoMes['aportesFonte'] = null
   let ext = 0, sai = 0, internos = 0, naoInf = 0, provFora = 0
   let brutos = false
+  let divergente = false
   for (const m of movs) {
     if (m.valor == null) continue
     if (m.tipo === 'provento' && m.foraDaPosicao) provFora += m.valor
@@ -238,6 +240,12 @@ export function resumoMes(b: Base, ix: Indices, ano: number, mes: number): Resum
     aportes = Math.max(liq, 0); resgates = Math.max(-liq, 0)
     // quando há movimentações externas registradas cujo líquido bate com o fluxo, detalha entradas e saídas brutas
     if ((ext || sai) && Math.abs(ext - sai - liq) < 0.01) { aportes = r2(ext); resgates = r2(sai); brutos = true }
+    // há movimentações com dinheiro externo registradas e elas não batem com o aporte informado: um dos dois
+    // está errado (sinal, valor ou lançamento faltando). Sem conferir, o resultado não é apurado.
+    else if (ext || sai) {
+      divergente = true
+      pend.push(`Aporte líquido informado (${moeda(liq)}) difere das movimentações com dinheiro externo registradas (${moeda(ext - sai)}) — confira qual está certo`)
+    }
   } else if (fech?.movimentacoesConfirmadas) {
     aportes = r2(ext); resgates = r2(sai); liq = r2(ext - sai); fonte = 'movimentacoes'; brutos = true
     if (naoInf) pend.push(`${naoInf} movimentação(ões) sem origem do recurso informada (externo/interno)`)
@@ -254,7 +262,7 @@ export function resumoMes(b: Base, ix: Indices, ano: number, mes: number): Resum
   const ajuste = fluxo?.ajuste ?? null
   let resultado: number | null = null
   let rentabilidade: number | null = null
-  const podeApurar = ini.valor != null && fim.valor != null && liq != null && !pend.some((p) => p.startsWith('Movimentações'))
+  const podeApurar = ini.valor != null && fim.valor != null && liq != null && !divergente && !pend.some((p) => p.startsWith('Movimentações'))
   if (podeApurar) {
     // nos meses com fluxo consolidado, proventos já estão dentro da variação do saldo;
     // nos meses manuais, proventos pagos fora da posição somam ao resultado.
@@ -450,7 +458,9 @@ export function patrimonioEm(b: Base, ix: Indices, ano: number, mes: number): Pa
     if (s) { dividas += s.saldoDevedor; dividasDetalhe.push({ divida: d, saldo: s }) } else { semDiv++; dividasDetalhe.push({ divida: d, saldo: null }) }
   }
   const temBens = bensDetalhe.some((x) => x.avaliacao || x.participacao)
-  const bruto = inv.valor == null && !temConta && !temBens ? null : (inv.valor ?? 0) + contas + bens
+  // investimentos vigentes sem posição no mês: o total é desconhecido; tratar como zero mostraria uma queda falsa
+  const faltamInvestimentos = inv.valor == null && inv.faltando.length > 0
+  const bruto = faltamInvestimentos || (inv.valor == null && !temConta && !temBens) ? null : (inv.valor ?? 0) + contas + bens
   const datas = [inv.dataPosicao, ...bensDetalhe.map((x) => x.avaliacao?.data ?? null), ...dividasDetalhe.map((x) => x.saldo?.data ?? null), ...contasDetalhe.map((x) => x.data)].filter((x): x is string => !!x)
   return {
     ano, mes, investimentos: inv.valor, investimentosInfo: inv, contas: temConta ? r2(contas) : null, contasDetalhe, bens: r2(bens), bensDetalhe,

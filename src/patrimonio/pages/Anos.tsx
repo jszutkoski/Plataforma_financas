@@ -201,6 +201,14 @@ function MesDetalhe({ ano, mes, resumo, linhas, onAtivo }: { ano: number; mes: n
           </tbody>
         </table>
       </div>
+      {(() => {
+        // PAT-008: a soma por ativo nem sempre fecha com a carteira (aporte informado só no total, taxas, proventos); mostrar a diferença
+        if (resumo.resultado == null || !visiveis.length || visiveis.some((l) => l.resultado == null)) return null
+        const soma = visiveis.reduce((s, l) => s + (l.resultado ?? 0), 0)
+        const dif = Math.round((resumo.resultado - soma) * 100) / 100
+        if (Math.abs(dif) < 0.01) return null
+        return <Aviso tipo="alerta">A soma dos resultados por ativo (<Valor v={Math.round(soma * 100) / 100} sinal />) difere do resultado da carteira (<Valor v={resumo.resultado} sinal />) em <Valor v={dif} sinal />. A diferença não está atribuída a nenhum ativo: costuma vir de aporte ou resgate informado só no total do mês, de taxas ou de proventos registrados de formas diferentes.</Aviso>
+      })()}
       <p className="text-xs text-muted mt-2">Resultado por ativo só é apurado quando os saldos inicial e final do ativo são conhecidos (saldo final − inicial − aplicações + resgates + proventos fora da posição − taxas). Nos meses em que só se conhece o total da carteira, o resultado por ativo não é apurado.</p>
     </Card>
   )
