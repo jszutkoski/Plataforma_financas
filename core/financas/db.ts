@@ -134,6 +134,29 @@ export function garantirProjetosDosRazoes() {
 }
 garantirProjetosDosRazoes() // migração de bancos criados antes da tabela projetos
 
+/**
+ * Categorias raiz com o mesmo nome e tipo (o UNIQUE da tabela não as impedia, porque parent_id é NULL):
+ * mescla na mais antiga — os lançamentos já apontam para o nome, então nada muda neles — e cria o índice
+ * que impede novas duplicatas.
+ */
+function unificarCategoriasRaiz() {
+  type Dup = { nome: string; tipo: string; manter: number }
+  const dups = db.prepare('SELECT nome, tipo, MIN(id) AS manter FROM categorias WHERE parent_id IS NULL GROUP BY nome, tipo HAVING COUNT(*) > 1').all() as unknown as Dup[]
+  transacao(() => {
+    for (const d of dups) {
+      for (const { id } of db.prepare('SELECT id FROM categorias WHERE parent_id IS NULL AND nome = ? AND tipo = ? AND id <> ?').all(d.nome, d.tipo, d.manter) as { id: number }[]) {
+        for (const f of db.prepare('SELECT id, nome FROM categorias WHERE parent_id = ?').all(id) as { id: number; nome: string }[]) {
+          if (db.prepare('SELECT 1 FROM categorias WHERE parent_id = ? AND nome = ?').get(d.manter, f.nome)) db.prepare('DELETE FROM categorias WHERE id = ?').run(f.id)
+          else db.prepare('UPDATE categorias SET parent_id = ? WHERE id = ?').run(d.manter, f.id)
+        }
+        db.prepare('DELETE FROM categorias WHERE id = ?').run(id)
+      }
+    }
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS ux_categorias_raiz ON categorias(nome, tipo) WHERE parent_id IS NULL')
+  })
+}
+unificarCategoriasRaiz()
+
 // ---------- helpers ----------
 type Row = Record<string, string | number | null | bigint | Uint8Array>
 

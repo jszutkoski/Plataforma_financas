@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Lancamento, LancamentoInput, Grupo } from '@fin-shared/types'
 import { TIPOS, TIPO_LABEL, GRUPOS_DESPESA, MESES } from '@fin-shared/types'
 import { useStore } from '@fin/lib/store'
@@ -29,17 +29,26 @@ export function LancamentoForm({ aberto, onFechar, editar, base, onSalvo }: Prop
   const [erro, setErro] = useState<string | null>(null)
   const [sugestao, setSugestao] = useState<ReturnType<typeof sugerirCategoria>>(null)
 
+  // o formulário é preenchido UMA vez ao abrir (ou ao trocar o lançamento editado). Antes, qualquer nova
+  // renderização da página — como o aviso "Lançamento criado." sumindo — apagava o que estava sendo digitado.
+  const preenchidoPara = useRef<string | null>(null)
   useEffect(() => {
-    if (!aberto) return
+    if (!aberto) { preenchidoPara.current = null; return }
+    const chave = editar?.id ?? 'novo'
+    if (preenchidoPara.current === chave) return
+    preenchidoPara.current = chave
     const init = editar ? { ...editar } : vazio(base)
     setF(init)
-    const emGrupo = !!editar?.parcelamentoId
-    const somaGrupo = emGrupo ? lancamentos.filter((l) => l.parcelamentoId === editar!.parcelamentoId).reduce((s, l) => s + l.valor, 0) : 0
-    // ao editar uma compra parcelada, o campo mostra o valor TOTAL do parcelamento
-    setValorTxt(emGrupo ? somaGrupo.toFixed(2).replace('.', ',') : init.valor ? init.valor.toFixed(2).replace('.', ',') : '')
+    setValorTxt(init.valor ? init.valor.toFixed(2).replace('.', ',') : '')
     setCompManual(!!editar && (editar.ano !== Number(editar.data.slice(0, 4)) || editar.mes !== Number(editar.data.slice(5, 7))))
-    setGerarParcelas(!editar || emGrupo); setErro(null); setSugestao(null)
-  }, [aberto, editar, base, lancamentos])
+    // editar uma parcela altera só ela; regravar o parcelamento inteiro é escolha explícita
+    setGerarParcelas(!editar); setErro(null); setSugestao(null)
+  }, [aberto, editar, base])
+  /** Ao marcar "atualizar todas as parcelas", o valor passa a ser o TOTAL da compra (e volta à parcela ao desmarcar). */
+  const alternarTodasParcelas = (marcar: boolean) => {
+    setGerarParcelas(marcar)
+    if (editar?.parcelamentoId) setValorTxt((marcar ? totalGrupo : editar.valor).toFixed(2).replace('.', ','))
+  }
 
   const set = <K extends keyof LancamentoInput>(k: K, v: LancamentoInput[K]) => setF((p) => ({ ...p, [k]: v }))
 
@@ -170,10 +179,11 @@ export function LancamentoForm({ aberto, onFechar, editar, base, onSalvo }: Prop
           </Campo>
           {(f.totalParcelas ?? 0) > 1 && (
             <label className="col-span-2 text-xs flex items-start gap-2 text-ink-2">
-              <input type="checkbox" className="mt-0.5" checked={gerarParcelas} onChange={(e) => setGerarParcelas(e.target.checked)} />
+              <input type="checkbox" className="mt-0.5" checked={gerarParcelas} onChange={(e) => alternarTodasParcelas(e.target.checked)} />
               <span>
-                {editar?.parcelamentoId ? 'Atualizar todas as parcelas deste parcelamento' : editar ? 'Substituir este lançamento pelas parcelas nos meses seguintes' : 'Lançar as demais parcelas nos meses seguintes'} — o valor informado é o <strong>total</strong>, dividido em {f.totalParcelas} parcelas
-                {parseValorBR(valorTxt) ? ` de ${fmtBRL((parseValorBR(valorTxt) ?? 0) / (f.totalParcelas ?? 1))}` : ''}{editar?.parcelamentoId ? ` (hoje: ${grupo.length} parcelas somando ${fmtBRL(totalGrupo)})` : ''}.
+                {editar?.parcelamentoId ? 'Atualizar todas as parcelas deste parcelamento' : editar ? 'Substituir este lançamento pelas parcelas nos meses seguintes' : 'Lançar as demais parcelas nos meses seguintes'}
+                {gerarParcelas ? <> — o valor informado é o <strong>total</strong>, dividido em {f.totalParcelas} parcelas{parseValorBR(valorTxt) ? ` de ${fmtBRL((parseValorBR(valorTxt) ?? 0) / (f.totalParcelas ?? 1))}` : ''}{editar?.parcelamentoId ? ` (hoje: ${grupo.length} parcelas somando ${fmtBRL(totalGrupo)}); alterações feitas só em alguma parcela serão substituídas` : ''}.</>
+                  : editar?.parcelamentoId ? ' — desmarcado: só esta parcela é alterada.' : '.'}
               </span>
             </label>
           )}

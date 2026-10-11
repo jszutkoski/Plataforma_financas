@@ -153,11 +153,15 @@ export function atualizarCategoria({ id, nome, grupo, parentId }: { id: number; 
       // categoria raiz: renomeia em lançamentos e propaga grupo às filhas
       db.prepare('UPDATE lancamentos SET categoria = ?, grupo = COALESCE(?, grupo) WHERE categoria = ? AND tipo = ? AND fora_do_fluxo = 0').run(novoNome, novoGrupo, atual!.nome as string, tipo)
       db.prepare('UPDATE categorias SET grupo = ? WHERE parent_id = ?').run(novoGrupo, id)
+      // recorrências também guardam o nome: sem isto, gerariam lançamentos na categoria antiga
+      db.prepare('UPDATE recorrencias SET categoria = ? WHERE categoria = ? AND tipo = ?').run(novoNome, atual!.nome as string, tipo)
     } else {
       const paiAntigo = db.prepare('SELECT nome FROM categorias WHERE id = ?').get(atual!.parent_id as number) as Row
       const paiNovo = db.prepare('SELECT nome, grupo FROM categorias WHERE id = ?').get(novoParent as number) as Row | undefined
       db.prepare('UPDATE lancamentos SET subcategoria = ?, categoria = ?, grupo = COALESCE(?, grupo) WHERE subcategoria = ? AND categoria = ? AND tipo = ? AND fora_do_fluxo = 0')
         .run(novoNome, (paiNovo?.nome ?? paiAntigo.nome) as string, (paiNovo?.grupo as string) ?? null, atual!.nome as string, paiAntigo.nome as string, tipo)
+      db.prepare('UPDATE recorrencias SET subcategoria = ?, categoria = ? WHERE subcategoria = ? AND categoria = ? AND tipo = ?')
+        .run(novoNome, (paiNovo?.nome ?? paiAntigo.nome) as string, atual!.nome as string, paiAntigo.nome as string, tipo)
     }
     return null
   })
@@ -298,6 +302,25 @@ export function backup(): Backup {
   return { versao: 1, geradoEm: new Date().toISOString(), lancamentos: listarLancamentos(), categorias: listarCategorias(), contas: listarContas(), recorrencias: listarRecorrencias(), projetos: listarProjetos() }
 }
 
+/**
+ * Categorias do backup entram pelo NOME (tipo + categoria pai), não pelo id: os ids de outro banco podem
+ * pertencer a outras categorias aqui. As que já existem são reaproveitadas; as novas são criadas.
+ */
+function restaurarCategorias(cats: Categoria[]) {
+  const mapa = new Map<number, number>() // id no backup → id neste banco
+  const buscar = db.prepare('SELECT id FROM categorias WHERE nome = ? AND tipo = ? AND parent_id IS ?')
+  const inserir = db.prepare('INSERT INTO categorias (nome, tipo, grupo, parent_id, ordem) VALUES (?,?,?,?,?)')
+  for (const raizes of [true, false]) {
+    for (const c of cats) {
+      if ((c.parentId == null) !== raizes) continue
+      const pai = c.parentId == null ? null : mapa.get(c.parentId)
+      if (pai === undefined) continue // pai ausente do backup
+      const ja = buscar.get(c.nome, c.tipo, pai) as { id: number } | undefined
+      mapa.set(c.id, ja ? ja.id : Number(inserir.run(c.nome, c.tipo, c.grupo, pai, c.ordem).lastInsertRowid))
+    }
+  }
+}
+
 export function restaurar({ b, modo = 'substituir' }: { b: Backup; modo: 'substituir' | 'mesclar' }) {
   if (b?.versao !== 1 || !Array.isArray(b.lancamentos)) erro('Arquivo de backup inválido.')
   // substituir apaga tudo: antes, guarda uma cópia do banco atual
@@ -311,14 +334,7 @@ export function restaurar({ b, modo = 'substituir' }: { b: Backup; modo: 'substi
       if (db.prepare('SELECT 1 FROM lancamentos WHERE id = ?').get(l.id)) continue
       inserirLancamento({ ...l }, { criadoEm: l.criadoEm }); n++
     }
-    for (const c of b.categorias ?? []) {
-      if (c.parentId != null) continue
-      db.prepare('INSERT OR IGNORE INTO categorias (id, nome, tipo, grupo, parent_id, ordem) VALUES (?,?,?,?,NULL,?)').run(c.id, c.nome, c.tipo, c.grupo, c.ordem)
-    }
-    for (const c of b.categorias ?? []) {
-      if (c.parentId == null) continue
-      db.prepare('INSERT OR IGNORE INTO categorias (id, nome, tipo, grupo, parent_id, ordem) VALUES (?,?,?,?,?,?)').run(c.id, c.nome, c.tipo, c.grupo, c.parentId, c.ordem)
-    }
+    restaurarCategorias(b.categorias ?? [])
     for (const c of b.contas ?? []) db.prepare('INSERT OR IGNORE INTO contas (id, nome, tipo, ativo) VALUES (?,?,?,?)').run(c.id, c.nome, c.tipo, c.ativo ? 1 : 0)
     for (const r of b.recorrencias ?? []) db.prepare(`INSERT OR IGNORE INTO recorrencias (id, descricao, valor, tipo, grupo, categoria, subcategoria, conta, forma_pagamento, dia, inicio, fim, observacoes, ativo)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(r.id, r.descricao, r.valor, r.tipo, r.grupo, r.categoria, r.subcategoria, r.conta, r.formaPagamento, r.dia, r.inicio, r.fim, r.observacoes, r.ativo ? 1 : 0)
