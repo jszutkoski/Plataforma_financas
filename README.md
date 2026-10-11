@@ -138,7 +138,7 @@ A interface roda sem acesso a Node: o `preload.ts` expõe apenas `chamar(canal, 
 
 Como as duas seções vivem no mesmo processo, a integração entre elas é chamada de função direta: o aporte líquido do mês pode ser trazido dos lançamentos de investimento/resgate do Finanças, e uma aplicação ou resgate com dinheiro externo registrada no Patrimônio gera o lançamento de caixa correspondente. Aplicações nunca viram despesa, nem resgates viram renda.
 
-**Tecnologias**: Electron 44, React 19, Vite 8, Tailwind 4, Recharts 3, TypeScript e `node:sqlite`.
+**Tecnologias**: Electron 44, React 19, Vite 8, Tailwind 4, Recharts 3, TypeScript, `node:sqlite` e SheetJS 0.20.3 (em `vendor/`: a versão corrigida só é distribuída pelo CDN da SheetJS, não pelo npm).
 
 ---
 
@@ -146,7 +146,7 @@ Como as duas seções vivem no mesmo processo, a integração entre elas é cham
 
 ```bash
 npm run dev        # Vite com recarga automática + Electron
-npm test           # 43 testes: núcleo, cálculos, importação e persistência
+npm test           # 58 testes: núcleo, cálculos, importação e persistência
 npm run typecheck  # interface e processo principal
 npm run build      # compila interface (dist/) e processo principal (dist-electron/)
 ```
