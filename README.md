@@ -91,11 +91,14 @@ Não há dependências nativas para compilar: o SQLite é o módulo `node:sqlite
 ## Primeiros passos
 
 1. Abra o aplicativo. O banco é criado vazio, com um conjunto inicial de categorias (Moradia, Alimentação, Transporte, Salário, Aportes…) que você pode renomear, remover ou ampliar.
-2. Em **Finanças → Lançamentos → + Novo**, registre entradas e saídas; ou use **Importar** para ler um extrato do banco ou a fatura do cartão em CSV/XLSX, relacionando as colunas do arquivo aos campos do sistema.
+2. Em **Finanças → Lançamentos → + Novo**, registre entradas e saídas; ou use **Importar** para ler um extrato do banco ou a fatura do cartão em CSV/XLSX, relacionando as colunas do arquivo aos campos do sistema. Informe o **formato do arquivo**: no extrato, entradas viram receita e saídas, despesa; na fatura, estornos e créditos (valores negativos) abatem o gasto.
+   Estorno ou reembolso digitado à mão é uma **despesa com valor negativo**, na mesma categoria da compra: reduz o gasto do mês sem contar como renda.
 3. Em **Patrimônio → Investimentos**, cadastre seus ativos e, a cada mês, informe as posições em **Atualizar mês**.
 4. Faça um backup em **Dados → Baixar backup (JSON)** de tempos em tempos.
 
-Meses sem dados aparecem em branco: o programa não estima nem preenche valores que você não informou.
+Meses sem dados aparecem em branco: o programa não estima nem preenche valores que você não informou. No Patrimônio, um mês em que falta a posição dos investimentos fica sem patrimônio total, e um aporte informado que não bate com as movimentações registradas vira pendência em vez de resultado.
+
+Ao marcar uma dívida como quitada ou uma conta como encerrada, informe a data: até ela, o item continua no histórico.
 
 ---
 
@@ -112,6 +115,7 @@ Dentro dela: `financas.db`, `patrimonio.db` e `backups/`.
 
 - *Baixar backup (JSON)* — formato completo, usado para levar os dados a outro computador (lá, use **Restaurar**);
 - *Copiar arquivo .db* — cópia do banco na pasta `backups/`;
+- antes de **Restaurar (substituir)** ou **Apagar todos os dados**, o programa guarda sozinho uma cópia do banco em `backups/`;
 - exportações em CSV de qualquer tabela.
 
 O diálogo de salvar é o do próprio sistema: você escolhe a pasta.
@@ -142,7 +146,7 @@ Como as duas seções vivem no mesmo processo, a integração entre elas é cham
 
 ```bash
 npm run dev        # Vite com recarga automática + Electron
-npm test           # 20 testes do núcleo e dos cálculos
+npm test           # 43 testes: núcleo, cálculos, importação e persistência
 npm run typecheck  # interface e processo principal
 npm run build      # compila interface (dist/) e processo principal (dist-electron/)
 ```

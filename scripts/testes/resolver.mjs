@@ -11,7 +11,7 @@ function comExtensao(url) {
   return url
 }
 
-export async function resolve(especificador, contexto, proximo) {
+export function resolve(especificador, contexto, proximo) {
   for (const [alias, pasta] of Object.entries(aliases)) {
     if (especificador.startsWith(alias)) return proximo(comExtensao(new URL(pasta + especificador.slice(alias.length), raiz).href), contexto)
   }
