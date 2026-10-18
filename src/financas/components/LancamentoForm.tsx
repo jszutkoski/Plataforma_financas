@@ -6,6 +6,7 @@ import { api } from '@fin/lib/api'
 import { hojeISO, parseValorBR, fmtBRL } from '@fin/lib/format'
 import { sugerirCategoria, descricoesFrequentes } from '@fin/lib/suggest'
 import { Campo, Modal } from './ui'
+import { Calendario } from './Calendario'
 
 export const FORMAS = ['Pix', 'Cartão de crédito', 'Cartão de débito', 'Dinheiro', 'Boleto', 'Transferência', 'Débito automático', 'Outro']
 
@@ -118,18 +119,23 @@ export function LancamentoForm({ aberto, onFechar, editar, base, onSalvo }: Prop
   const mes = Number(f.data?.slice(5, 7)) || 1
 
   return (
-    <Modal aberto={aberto} titulo={editar ? 'Editar lançamento' : 'Novo lançamento'} onFechar={onFechar}>
-      <form onSubmit={salvar} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Campo rotulo="Tipo">
+    <Modal aberto={aberto} titulo={editar ? 'Editar lançamento' : 'Novo lançamento'} onFechar={onFechar} largura="max-w-4xl">
+      <form onSubmit={salvar} className="grid grid-cols-1 md:grid-cols-[16rem_1fr] gap-4">
+        {/* data à esquerda, com o calendário já aberto */}
+        <div className="space-y-2">
+          <Campo rotulo="Data">
+            <input type="date" className="input" value={f.data} onChange={(e) => set('data', e.target.value)} required />
+          </Campo>
+          <Calendario valor={f.data} onChange={(d) => set('data', d)} />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
+        <Campo rotulo="Tipo" className="sm:col-span-2">
           <div className="flex flex-wrap gap-1">
             {TIPOS.map((t) => (
               <button type="button" key={t} onClick={() => setF((p) => ({ ...p, tipo: t, categoria: null, subcategoria: null, grupo: t === 'despesa' ? 'Variáveis' : null }))}
                 className={`btn !py-1 !px-2.5 text-xs border ${f.tipo === t ? 'bg-renda text-white border-transparent' : 'bg-surface-2 border-transparent text-ink-2'}`}>{TIPO_LABEL[t]}</button>
             ))}
           </div>
-        </Campo>
-        <Campo rotulo="Data">
-          <input type="date" className="input" value={f.data} onChange={(e) => set('data', e.target.value)} required />
         </Campo>
         <Campo rotulo="Descrição" className="sm:col-span-2">
           <input className="input" list="desc-sugestoes" value={f.descricao} onChange={(e) => set('descricao', e.target.value)} onBlur={aoSairDescricao} required autoFocus placeholder="Ex.: Supermercado" />
@@ -206,6 +212,7 @@ export function LancamentoForm({ aberto, onFechar, editar, base, onSalvo }: Prop
         <div className="sm:col-span-2 flex justify-end gap-2 pt-1">
           <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
           <button type="submit" className="btn-primary" disabled={salvando}>{salvando ? 'Salvando…' : editar ? 'Salvar alterações' : 'Adicionar'}</button>
+        </div>
         </div>
       </form>
     </Modal>

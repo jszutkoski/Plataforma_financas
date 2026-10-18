@@ -67,17 +67,20 @@ function Mensal() {
         </div>
       </div>
 
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Card title={catSel ? `Subcategorias de ${catSel}` : 'Gastos por categoria'} subtitle={catSel ? 'Clique em voltar para ver todas as categorias' : 'Clique em uma barra para detalhar'} actions={catSel && <button className="btn-ghost !py-1 text-xs" onClick={() => setCatSel(null)}>← voltar</button>}>
+          <CategoriasBarras itens={catSel ? subs : cats} total={r.gastos} onClick={catSel ? undefined : setCatSel} />
+        </Card>
+        <Card title="Renda, gastos e investimentos" subtitle="Média dos meses anteriores, mês anterior e mês atual">
+          <ComparativoChart series={[{ nome: `Média ${nMedia}m`, r: media }, { nome: nomeMesCurto(mesAnterior(ano, mes).mes), r: ant.temDados ? ant : null }, { nome: nomeMesCurto(mes), r }]} />
+        </Card>
+      </div>
+
       <Card title="Resumo do mês" subtitle="Descrição gerada a partir dos números registrados">
         <div className="text-sm leading-relaxed space-y-2 text-ink-2">{texto.map((t, i) => <p key={i}>{t}</p>)}</div>
       </Card>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Card title={catSel ? `Subcategorias de ${catSel}` : 'Gastos por categoria'} subtitle={catSel ? 'Clique em voltar para ver todas as categorias' : 'Clique em uma barra para detalhar'} actions={catSel && <button className="btn-ghost !py-1 text-xs" onClick={() => setCatSel(null)}>← voltar</button>}>
-          <CategoriasBarras itens={catSel ? subs : cats} total={r.gastos} onClick={catSel ? undefined : setCatSel} />
-        </Card>
-        <Card title="Renda, gastos e investimentos" subtitle="Mês atual, mês anterior e média dos meses anteriores">
-          <ComparativoChart series={[{ nome: nomeMesCurto(mes), r }, { nome: nomeMesCurto(mesAnterior(ano, mes).mes), r: ant.temDados ? ant : null }, { nome: `Média ${nMedia}m`, r: media }]} />
-        </Card>
         <Card title="Evolução diária dos gastos" subtitle="Somente lançamentos com data no mês; acumulado inclui os totais consolidados">
           <DiarioChart pontos={diario} />
         </Card>

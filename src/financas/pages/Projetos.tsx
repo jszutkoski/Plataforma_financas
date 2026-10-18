@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import type { Lancamento, LancamentoInput, Projeto } from '@fin-shared/types'
 import { useStore } from '@fin/lib/store'
 import { api } from '@fin/lib/api'
-import { fmtBRL, fmtData, hojeISO } from '@fin/lib/format'
+import { fmtBRL, fmtData, hojeISO, parseValorBR } from '@fin/lib/format'
 import { Campo, Card, Confirm, Modal, Vazio } from '@fin/components/ui'
 
 /** Custos de um projeto = lançamentos fora do fluxo com ledger = nome do projeto. */
@@ -62,13 +62,14 @@ export function Projetos() {
   // ---- custos: criar / editar / remover ----
   const [formCusto, setFormCusto] = useState<{ editar: Custo | null; f: FormCusto } | null>(null)
   const [removerCusto, setRemoverCusto] = useState<Custo | null>(null)
-  const abrirCusto = (c: Custo | null) => setFormCusto({ editar: c, f: c ? { data: c.data, descricao: c.descricao, secao: c.subcategoria ?? '', valor: String(c.valor), tipo: c.tipo === 'receita' ? 'receita' : 'despesa', observacoes: c.observacoes ?? '' } : custoVazio() })
+  const abrirCusto = (c: Custo | null) => setFormCusto({ editar: c, f: c ? { data: c.data, descricao: c.descricao, secao: c.subcategoria ?? '', valor: c.valor.toFixed(2).replace('.', ','), tipo: c.tipo === 'receita' ? 'receita' : 'despesa', observacoes: c.observacoes ?? '' } : custoVazio() })
   const setF = <K extends keyof FormCusto>(k: K, v: FormCusto[K]) => setFormCusto((s) => (s ? { ...s, f: { ...s.f, [k]: v } } : s))
   const salvarCusto = async (e: FormEvent) => {
     e.preventDefault()
     if (!formCusto || !projeto) return
     const { editar, f } = formCusto
-    const valor = Number(String(f.valor).replace(',', '.'))
+    const valor = parseValorBR(f.valor)
+    if (valor == null || valor <= 0) { aviso('Informe um valor maior que zero (ex.: 1.234,56).', 'erro'); return }
     const base: LancamentoInput = editar
       ? { ...editar, ano: undefined, mes: undefined, data: f.data, descricao: f.descricao.trim(), subcategoria: f.secao.trim() || null, valor, tipo: f.tipo, observacoes: f.observacoes.trim() || null, foraDoFluxo: true, ledger: projeto.nome }
       : { data: f.data, descricao: f.descricao.trim(), tipo: f.tipo, valor, grupo: null, categoria: null, subcategoria: f.secao.trim() || null, conta: null, formaPagamento: null, parcela: null, totalParcelas: null,
@@ -153,7 +154,7 @@ export function Projetos() {
           </div>
           <Campo rotulo="Descrição"><input className="input" value={formCusto.f.descricao} onChange={(e) => setF('descricao', e.target.value)} required autoFocus /></Campo>
           <div className="grid grid-cols-2 gap-3">
-            <Campo rotulo="Valor (R$)"><input className="input tnum" type="number" step="0.01" min="0.01" value={formCusto.f.valor} onChange={(e) => setF('valor', e.target.value)} required /></Campo>
+            <Campo rotulo="Valor (R$)"><input className="input tnum" inputMode="decimal" placeholder="0,00" value={formCusto.f.valor} onChange={(e) => setF('valor', e.target.value)} required /></Campo>
             <Campo rotulo="Seção (opcional)"><input className="input" list="secoes-projeto" value={formCusto.f.secao} onChange={(e) => setF('secao', e.target.value)} placeholder="Ex.: Material, Mão de obra" /><datalist id="secoes-projeto">{secoes.map((s) => <option key={s} value={s} />)}</datalist></Campo>
           </div>
           <Campo rotulo="Observações (opcional)"><textarea className="input" rows={2} value={formCusto.f.observacoes} onChange={(e) => setF('observacoes', e.target.value)} /></Campo>
