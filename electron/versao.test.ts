@@ -17,4 +17,7 @@ test('acha o hash do arquivo no SHA256SUMS (e só dele)', () => {
   assert.equal(hashDoArquivo(somas, 'financas-desktop_1.5.0_amd64.deb'), d)
   assert.equal(hashDoArquivo(somas, 'Financas-1.4.0.AppImage'), null)
   assert.equal(hashDoArquivo('lixo', 'x'), null)
+  // o GitHub publica "Finanças-1.5.0.AppImage" como "Financas-1.5.0.AppImage"
+  assert.equal(hashDoArquivo(`${h}  Finanças-1.5.0.AppImage`, 'Financas-1.5.0.AppImage'), h)
+  assert.equal(hashDoArquivo(`${d}  Finanças Setup 1.5.0.exe`, 'Financas.Setup.1.5.0.exe'), d)
 })

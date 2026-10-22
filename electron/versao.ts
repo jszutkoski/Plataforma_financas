@@ -8,11 +8,14 @@ export function compararVersoes(a: string, b: string): number {
   return 0
 }
 
+/** Nome como o GitHub publica: sem acentos e com espaços trocados por ponto ("Finanças Setup.exe" → "Financas.Setup.exe"). */
+const nomePublicado = (n: string) => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '.')
+
 /** Linha "<sha256>  <arquivo>" (formato do sha256sum) → hash do arquivo pedido, ou null. */
 export function hashDoArquivo(somas: string, arquivo: string): string | null {
   for (const linha of somas.split(/\r?\n/)) {
     const m = linha.trim().match(/^([0-9a-f]{64})\s+\*?(.+)$/i)
-    if (m && m[2].trim() === arquivo) return m[1].toLowerCase()
+    if (m && (m[2].trim() === arquivo || nomePublicado(m[2].trim()) === nomePublicado(arquivo))) return m[1].toLowerCase()
   }
   return null
 }

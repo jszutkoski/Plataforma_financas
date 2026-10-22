@@ -70,7 +70,14 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "perMachine": false
+      "perMachine": false,
+      "artifactName": "Financas.Setup.${version}.${ext}"
+    },
+    "appImage": {
+      "artifactName": "Financas-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Financas.${version}.${ext}"
     }
   },
   "license": "MIT",
