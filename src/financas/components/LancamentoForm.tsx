@@ -118,103 +118,132 @@ export function LancamentoForm({ aberto, onFechar, editar, base, onSalvo }: Prop
   const ano = Number(f.data?.slice(0, 4)) || new Date().getFullYear()
   const mes = Number(f.data?.slice(5, 7)) || 1
 
+  const parcelado = gerarParcelas && (f.totalParcelas ?? 0) > 1
+  const despesa = f.tipo === 'despesa'
+
   return (
     <Modal aberto={aberto} titulo={editar ? 'Editar lançamento' : 'Novo lançamento'} onFechar={onFechar} largura="max-w-4xl">
-      <form onSubmit={salvar} className="grid grid-cols-1 md:grid-cols-[16rem_1fr] gap-4">
-        {/* data à esquerda, com o calendário já aberto */}
-        <div className="space-y-2">
-          <Campo rotulo="Data">
-            <input type="date" className="input" value={f.data} onChange={(e) => set('data', e.target.value)} required />
-          </Campo>
-          <Calendario valor={f.data} onChange={(d) => set('data', d)} />
+      <form onSubmit={salvar} className="flex flex-col gap-4">
+        <div className="grid grid-cols-5 rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)' }} role="radiogroup" aria-label="Tipo">
+          {TIPOS.map((t) => (
+            <button type="button" key={t} role="radio" aria-checked={f.tipo === t} onClick={() => setF((p) => ({ ...p, tipo: t, categoria: null, subcategoria: null, grupo: t === 'despesa' ? 'Variáveis' : null }))}
+              className={`py-2 text-sm font-medium transition-colors ${f.tipo === t ? 'bg-renda text-white' : 'text-ink-2 hover:bg-surface-2'}`}>{TIPO_LABEL[t]}</button>
+          ))}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
-        <Campo rotulo="Tipo" className="sm:col-span-2">
-          <div className="flex flex-wrap gap-1">
-            {TIPOS.map((t) => (
-              <button type="button" key={t} onClick={() => setF((p) => ({ ...p, tipo: t, categoria: null, subcategoria: null, grupo: t === 'despesa' ? 'Variáveis' : null }))}
-                className={`btn !py-1 !px-2.5 text-xs border ${f.tipo === t ? 'bg-renda text-white border-transparent' : 'bg-surface-2 border-transparent text-ink-2'}`}>{TIPO_LABEL[t]}</button>
-            ))}
-          </div>
-        </Campo>
-        <Campo rotulo="Descrição" className="sm:col-span-2">
-          <input className="input" list="desc-sugestoes" value={f.descricao} onChange={(e) => set('descricao', e.target.value)} onBlur={aoSairDescricao} required autoFocus placeholder="Ex.: Supermercado" />
-          <datalist id="desc-sugestoes">{sugestoesDesc.map((d) => <option key={d} value={d} />)}</datalist>
-          {sugestao && (
-            <div className="mt-1 text-xs flex items-center gap-2 flex-wrap">
-              <span className="text-muted">Sugestão pelo histórico:</span>
-              <button type="button" className="chip hover:bg-renda/15" onClick={aplicarSugestao}>{sugestao.categoria}{sugestao.subcategoria ? ` › ${sugestao.subcategoria}` : ''} ✓</button>
-              <button type="button" className="text-muted underline" onClick={() => setSugestao(null)}>ignorar</button>
+
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_17rem] gap-5">
+          {/* campos à esquerda; o Tab segue Descrição → Valor → Categoria… e só depois a data */}
+          <div className="space-y-4 min-w-0">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_11rem] gap-3">
+              <Campo rotulo="Descrição">
+                <input className="input" list="desc-sugestoes" value={f.descricao} onChange={(e) => set('descricao', e.target.value)} onBlur={aoSairDescricao} required autoFocus placeholder="Ex.: Supermercado" />
+                <datalist id="desc-sugestoes">{sugestoesDesc.map((d) => <option key={d} value={d} />)}</datalist>
+              </Campo>
+              <Campo rotulo={parcelado ? 'Valor total' : 'Valor'}>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted pointer-events-none">R$</span>
+                  <input className="input tnum !pl-9 text-right !text-base font-semibold" inputMode="decimal" value={valorTxt} onChange={(e) => setValorTxt(e.target.value)} placeholder="0,00" required />
+                </div>
+              </Campo>
             </div>
-          )}
-        </Campo>
-        <Campo rotulo={gerarParcelas && (f.totalParcelas ?? 0) > 1 ? "Valor total (R$)" : "Valor (R$)"}>
-          <input className="input tnum" inputMode="decimal" value={valorTxt} onChange={(e) => setValorTxt(e.target.value)} placeholder="0,00" required />
-        </Campo>
-        {f.tipo === 'despesa' && (
-          <Campo rotulo="Natureza">
-            <select className="input" value={f.grupo ?? 'Variáveis'} onChange={(e) => set('grupo', e.target.value as Grupo)}>
-              {GRUPOS_DESPESA.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </Campo>
-        )}
-        <Campo rotulo="Categoria">
-          <input className="input" list="cat-lista" value={f.categoria ?? ''} onChange={(e) => escolherCategoria(e.target.value)} placeholder="Escolha ou digite uma nova" />
-          <datalist id="cat-lista">{cats.map((c) => <option key={c.id} value={c.nome} />)}</datalist>
-        </Campo>
-        <Campo rotulo="Subcategoria">
-          <input className="input" list="sub-lista" value={f.subcategoria ?? ''} onChange={(e) => set('subcategoria', e.target.value || null)} placeholder="Opcional" />
-          <datalist id="sub-lista">{subs.map((c) => <option key={c.id} value={c.nome} />)}</datalist>
-        </Campo>
-        <Campo rotulo="Conta / cartão">
-          <input className="input" list="conta-lista" value={f.conta ?? ''} onChange={(e) => set('conta', e.target.value || null)} placeholder="Opcional" />
-          <datalist id="conta-lista">{contas.filter((c) => c.ativo).map((c) => <option key={c.id} value={c.nome} />)}</datalist>
-        </Campo>
-        <Campo rotulo="Forma de pagamento">
-          <input className="input" list="forma-lista" value={f.formaPagamento ?? ''} onChange={(e) => set('formaPagamento', e.target.value || null)} placeholder="Opcional" />
-          <datalist id="forma-lista">{FORMAS.map((x) => <option key={x} value={x} />)}</datalist>
-        </Campo>
-        <div className="grid grid-cols-2 gap-3 sm:col-span-2">
-          {!(gerarParcelas && (f.totalParcelas ?? 0) > 1) && (
-            <Campo rotulo="Parcela nº">
-              <input className="input tnum" type="number" min={1} value={f.parcela ?? ''} onChange={(e) => set('parcela', e.target.value ? Number(e.target.value) : null)} placeholder="—" />
+            {sugestao && (
+              <div className="-mt-2 text-xs flex items-center gap-2 flex-wrap">
+                <span className="text-muted">Sugestão pelo histórico:</span>
+                <button type="button" className="chip hover:bg-renda/15" onClick={aplicarSugestao}>{sugestao.categoria}{sugestao.subcategoria ? ` › ${sugestao.subcategoria}` : ''} ✓</button>
+                <button type="button" className="text-muted underline" onClick={() => setSugestao(null)}>ignorar</button>
+              </div>
+            )}
+
+            <Secao titulo="Classificação">
+              <div className={`grid grid-cols-1 gap-3 ${despesa ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+                <Campo rotulo="Categoria">
+                  <input className="input" list="cat-lista" value={f.categoria ?? ''} onChange={(e) => escolherCategoria(e.target.value)} placeholder="Escolha ou digite" />
+                  <datalist id="cat-lista">{cats.map((c) => <option key={c.id} value={c.nome} />)}</datalist>
+                </Campo>
+                <Campo rotulo="Subcategoria">
+                  <input className="input" list="sub-lista" value={f.subcategoria ?? ''} onChange={(e) => set('subcategoria', e.target.value || null)} placeholder="Opcional" />
+                  <datalist id="sub-lista">{subs.map((c) => <option key={c.id} value={c.nome} />)}</datalist>
+                </Campo>
+                {despesa && (
+                  <Campo rotulo="Natureza">
+                    <select className="input" value={f.grupo ?? 'Variáveis'} onChange={(e) => set('grupo', e.target.value as Grupo)}>
+                      {GRUPOS_DESPESA.map((g) => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </Campo>
+                )}
+              </div>
+            </Secao>
+
+            <Secao titulo="Pagamento">
+              <div className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_5.5rem_5.5rem] gap-3">
+                <Campo rotulo="Conta / cartão">
+                  <input className="input" list="conta-lista" value={f.conta ?? ''} onChange={(e) => set('conta', e.target.value || null)} placeholder="Opcional" />
+                  <datalist id="conta-lista">{contas.filter((c) => c.ativo).map((c) => <option key={c.id} value={c.nome} />)}</datalist>
+                </Campo>
+                <Campo rotulo="Forma">
+                  <input className="input" list="forma-lista" value={f.formaPagamento ?? ''} onChange={(e) => set('formaPagamento', e.target.value || null)} placeholder="Opcional" />
+                  <datalist id="forma-lista">{FORMAS.map((x) => <option key={x} value={x} />)}</datalist>
+                </Campo>
+                <Campo rotulo="Parcela">
+                  <input className="input tnum" type="number" min={1} value={parcelado ? '' : (f.parcela ?? '')} disabled={parcelado} onChange={(e) => set('parcela', e.target.value ? Number(e.target.value) : null)} placeholder="—" title={parcelado ? 'Numeradas automaticamente' : 'Número desta parcela'} />
+                </Campo>
+                <Campo rotulo="de">
+                  <input className="input tnum" type="number" min={1} value={f.totalParcelas ?? ''} onChange={(e) => set('totalParcelas', e.target.value ? Number(e.target.value) : null)} placeholder="—" title="Total de parcelas" />
+                </Campo>
+              </div>
+              {(f.totalParcelas ?? 0) > 1 && (
+                <label className="mt-2 text-xs flex items-start gap-2 text-ink-2">
+                  <input type="checkbox" className="mt-0.5" checked={gerarParcelas} onChange={(e) => alternarTodasParcelas(e.target.checked)} />
+                  <span>
+                    {editar?.parcelamentoId ? 'Atualizar todas as parcelas deste parcelamento' : editar ? 'Substituir este lançamento pelas parcelas nos meses seguintes' : 'Lançar as demais parcelas nos meses seguintes'}
+                    {gerarParcelas ? <> — o valor informado é o <strong>total</strong>, dividido em {f.totalParcelas} parcelas{parseValorBR(valorTxt) ? ` de ${fmtBRL((parseValorBR(valorTxt) ?? 0) / (f.totalParcelas ?? 1))}` : ''}{editar?.parcelamentoId ? ` (hoje: ${grupo.length} parcelas somando ${fmtBRL(totalGrupo)}); alterações feitas só em alguma parcela serão substituídas` : ''}.</>
+                      : editar?.parcelamentoId ? ' — desmarcado: só esta parcela é alterada.' : '.'}
+                  </span>
+                </label>
+              )}
+            </Secao>
+
+            <Campo rotulo="Observações">
+              <textarea className="input" rows={2} value={f.observacoes ?? ''} onChange={(e) => set('observacoes', e.target.value || null)} placeholder="Opcional" />
             </Campo>
-          )}
-          <Campo rotulo="Total de parcelas">
-            <input className="input tnum" type="number" min={1} value={f.totalParcelas ?? ''} onChange={(e) => set('totalParcelas', e.target.value ? Number(e.target.value) : null)} placeholder="—" />
-          </Campo>
-          {(f.totalParcelas ?? 0) > 1 && (
-            <label className="col-span-2 text-xs flex items-start gap-2 text-ink-2">
-              <input type="checkbox" className="mt-0.5" checked={gerarParcelas} onChange={(e) => alternarTodasParcelas(e.target.checked)} />
-              <span>
-                {editar?.parcelamentoId ? 'Atualizar todas as parcelas deste parcelamento' : editar ? 'Substituir este lançamento pelas parcelas nos meses seguintes' : 'Lançar as demais parcelas nos meses seguintes'}
-                {gerarParcelas ? <> — o valor informado é o <strong>total</strong>, dividido em {f.totalParcelas} parcelas{parseValorBR(valorTxt) ? ` de ${fmtBRL((parseValorBR(valorTxt) ?? 0) / (f.totalParcelas ?? 1))}` : ''}{editar?.parcelamentoId ? ` (hoje: ${grupo.length} parcelas somando ${fmtBRL(totalGrupo)}); alterações feitas só em alguma parcela serão substituídas` : ''}.</>
-                  : editar?.parcelamentoId ? ' — desmarcado: só esta parcela é alterada.' : '.'}
-              </span>
-            </label>
-          )}
-        </div>
-        <Campo rotulo="Observações" className="sm:col-span-2">
-          <textarea className="input" rows={2} value={f.observacoes ?? ''} onChange={(e) => set('observacoes', e.target.value || null)} />
-        </Campo>
-        <div className="sm:col-span-2">
-          <label className="text-xs flex items-center gap-2 text-ink-2"><input type="checkbox" checked={compManual} onChange={(e) => { setCompManual(e.target.checked); if (e.target.checked) { set('ano', ano); set('mes', mes) } }} />
-            Contabilizar em outro mês (competência diferente da data)</label>
-          {compManual && (
-            <div className="flex gap-2 mt-2">
-              <select className="input" value={f.mes ?? mes} onChange={(e) => set('mes', Number(e.target.value))}>{MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
-              <input className="input tnum w-28" type="number" value={f.ano ?? ano} onChange={(e) => set('ano', Number(e.target.value))} />
+          </div>
+
+          {/* data à direita, com o calendário já aberto */}
+          <aside className="space-y-3 md:border-l md:pl-5" style={{ borderColor: 'var(--border)' }}>
+            <Campo rotulo="Data">
+              <input type="date" className="input" value={f.data} onChange={(e) => set('data', e.target.value)} required />
+            </Campo>
+            <Calendario valor={f.data} onChange={(d) => set('data', d)} />
+            <div>
+              <label className="text-xs flex items-start gap-2 text-ink-2"><input type="checkbox" className="mt-0.5" checked={compManual} onChange={(e) => { setCompManual(e.target.checked); if (e.target.checked) { set('ano', ano); set('mes', mes) } }} />
+                Contabilizar em outro mês (competência diferente da data)</label>
+              {compManual && (
+                <div className="flex gap-2 mt-2">
+                  <select className="input" value={f.mes ?? mes} onChange={(e) => set('mes', Number(e.target.value))}>{MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
+                  <input className="input tnum w-24" type="number" value={f.ano ?? ano} onChange={(e) => set('ano', Number(e.target.value))} />
+                </div>
+              )}
             </div>
-          )}
+          </aside>
         </div>
-        {editar?.origem && <p className="sm:col-span-2 text-xs text-muted">Origem: {editar.origem}{editar.origemArquivo ? ` — ${editar.origemArquivo}` : ''}</p>}
-        {erro && <p className="sm:col-span-2 text-sm text-bad">{erro}</p>}
-        <div className="sm:col-span-2 flex justify-end gap-2 pt-1">
+
+        <footer className="flex items-center gap-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex-1 min-w-0 text-xs">
+            {erro ? <p className="text-sm text-bad">{erro}</p> : editar?.origem && <p className="text-muted truncate">Origem: {editar.origem}{editar.origemArquivo ? ` — ${editar.origemArquivo}` : ''}</p>}
+          </div>
           <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
           <button type="submit" className="btn-primary" disabled={salvando}>{salvando ? 'Salvando…' : editar ? 'Salvar alterações' : 'Adicionar'}</button>
-        </div>
-        </div>
+        </footer>
       </form>
     </Modal>
+  )
+}
+
+function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-2">{titulo}</h3>
+      {children}
+    </section>
   )
 }
