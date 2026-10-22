@@ -108,6 +108,15 @@ export interface Projeto {
   criadoEm: string
 }
 
+/** Entrada ou saída prevista que não está nas recorrências (13º, férias, IPVA…): só afeta a projeção. Valor positivo entra, negativo sai. */
+export interface AjusteProjecao {
+  id: string
+  ano: number
+  mes: number
+  descricao: string
+  valor: number
+}
+
 export interface Backup {
   versao: 1
   geradoEm: string
@@ -116,6 +125,7 @@ export interface Backup {
   contas: Conta[]
   recorrencias: Recorrencia[]
   projetos?: Projeto[]
+  ajustesProjecao?: AjusteProjecao[]
 }
 
 export const MESES = [

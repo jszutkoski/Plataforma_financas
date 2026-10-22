@@ -1,14 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { useStore as useFin } from '@fin/lib/store'
 import { useStore as usePat } from '@pat/lib/store'
 import { Toast as ToastFin } from '@fin/components/ui'
 import { Toast as ToastPat } from '@pat/components/ui'
+import { BuscaGlobal } from './BuscaGlobal'
+import { Atualizacao } from './Atualizacao'
 
 const NAV_FIN = [
   { to: '/financas', rotulo: 'Painel', icone: '◫' },
   { to: '/financas/lancamentos', rotulo: 'Lançamentos', icone: '☰' },
   { to: '/financas/recorrentes', rotulo: 'Recorrentes', icone: '↻' },
+  { to: '/financas/projecao', rotulo: 'Projeção', icone: '↗' },
+  { to: '/financas/tendencias', rotulo: 'Tendências', icone: '∿' },
   { to: '/financas/categorias', rotulo: 'Categorias', icone: '⌗' },
   { to: '/financas/importar', rotulo: 'Importar', icone: '⇪' },
   { to: '/financas/projetos', rotulo: 'Projetos', icone: '▤' },
@@ -20,6 +24,7 @@ const NAV_PAT = [
   { to: '/patrimonio/atualizar', rotulo: 'Atualizar mês', icone: '✎' },
   { to: '/patrimonio/investimentos', rotulo: 'Investimentos', icone: '☰' },
   { to: '/patrimonio/movimentacoes', rotulo: 'Movimentações', icone: '⇅' },
+  { to: '/patrimonio/conciliacao', rotulo: 'Conciliação', icone: '⇄' },
   { to: '/patrimonio/bens', rotulo: 'Bens e dívidas', icone: '⌂' },
   { to: '/patrimonio/importar', rotulo: 'Importar', icone: '⇪' },
   { to: '/patrimonio/dados', rotulo: 'Dados', icone: '⛁' },
@@ -48,6 +53,14 @@ export function Shell() {
   const secao = emPatrimonio ? pat : fin
   const erro = fin.erro ?? pat.erro
 
+  const [busca, setBusca] = useState(false)
+  useEffect(() => {
+    const atalho = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setBusca((b) => !b) } }
+    window.addEventListener('keydown', atalho)
+    return () => window.removeEventListener('keydown', atalho)
+  }, [])
+  const telas = useMemo(() => [...NAV_FIN.map((n) => ({ ...n, secao: 'Finanças' })), ...NAV_PAT.map((n) => ({ ...n, secao: 'Patrimônio' }))], [])
+
   const aba = (ativa: boolean) => `flex-1 rounded-lg px-2 py-1.5 text-xs font-medium text-center ${ativa ? 'bg-renda text-white' : 'text-ink-2 hover:bg-surface-2'}`
 
   return (
@@ -57,12 +70,16 @@ export function Shell() {
           <NavLink to="/financas" className={({ isActive }) => aba(isActive || !emPatrimonio)}>Finanças</NavLink>
           <NavLink to="/patrimonio" className={() => aba(emPatrimonio)}>Patrimônio</NavLink>
         </div>
+        <button className="mb-2 flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm text-muted hover:bg-surface-2" style={{ borderColor: 'var(--border)' }} onClick={() => setBusca(true)}>
+          <span aria-hidden>⌕</span><span className="flex-1 text-left">Buscar</span><kbd className="text-[10px]">Ctrl K</kbd>
+        </button>
         {nav.map((n) => (
           <NavLink key={n.to} to={n.to} end={n.to === '/financas' || n.to === '/patrimonio'} className={({ isActive }) => `flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${isActive ? 'bg-renda/12 text-renda font-medium' : 'text-ink-2 hover:bg-surface-2'}`}>
             <span aria-hidden className="w-4 text-center">{n.icone}</span>{n.rotulo}
           </NavLink>
         ))}
         <div className="mt-auto px-2 text-xs text-muted space-y-2">
+          <Atualizacao />
           <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={pat.oculto} onChange={(e) => pat.setOculto(e.target.checked)} /> Ocultar valores</label>
           <div>
             <label className="block mb-1">Tema</label>
@@ -83,6 +100,7 @@ export function Shell() {
           </NavLink>
         ))}
       </nav>
+      <BuscaGlobal aberta={busca} onFechar={() => setBusca(false)} telas={telas} />
       <ToastFin toast={fin.toast} />
       <ToastPat toast={pat.toast} />
     </div>

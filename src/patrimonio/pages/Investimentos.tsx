@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { useStore } from '@pat/lib/store'
 import { api } from '@pat/lib/api'
 import { Card, Valor, Tag, Confirm, Vazio } from '@pat/components/ui'
@@ -17,6 +18,13 @@ export function Investimentos() {
   const [form, setForm] = useState<Investimento | 'novo' | null>(null)
   const [detalhe, setDetalhe] = useState<Investimento | null>(null)
   const [excluir, setExcluir] = useState<Investimento | null>(null)
+  // ?id= (busca global) abre o detalhe do ativo
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    const id = params.get('id')
+    const inv = id ? base.investimentos.find((i) => i.id === id) : null
+    if (inv) { setFiltroSit('todos'); setDetalhe(inv); setParams({}, { replace: true }) }
+  }, [params, base.investimentos, setParams])
 
   const linhas = useMemo(() => base.investimentos.map((inv) => {
     const pos = base.posicoes.filter((p) => p.investimentoId === inv.id).sort((a, b) => (b.ano - a.ano) || (b.mes - a.mes))[0] ?? null

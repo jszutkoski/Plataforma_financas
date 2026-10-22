@@ -328,3 +328,29 @@ export const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ag
 export const chaveMes = (ano: number, mes: number): string => `${ano}-${String(mes).padStart(2, '0')}`
 export const mesAnterior = (ano: number, mes: number): [number, number] => (mes === 1 ? [ano - 1, 12] : [ano, mes - 1])
 export const mesSeguinte = (ano: number, mes: number): [number, number] => (mes === 12 ? [ano + 1, 1] : [ano, mes + 1])
+
+/** Conciliação Finanças × Patrimônio (tela Conciliação). */
+export type SituacaoConciliacao = 'confere' | 'diferente' | 'nao_importado' | 'so_patrimonio' | 'desatualizado'
+export interface MovConciliacao { id: string; data: string | null; tipo: TipoMovimentacao; valor: number; entrada: boolean; investimento: string | null; financasId: string | null }
+export interface MesConciliacao {
+  ano: number
+  mes: number
+  itens: { id: string; data: string; tipo: 'investimento' | 'resgate'; valor: number; descricao: string; conta: string | null; subcategoria: string | null; movimentacaoId: string | null }[]
+  investimentos: number
+  resgates: number
+  liquido: number
+  aporte: number | null
+  origemAporte: string | null
+  movimentacoes: MovConciliacao[]
+  liquidoMovs: number
+  diferenca: number | null
+  situacao: SituacaoConciliacao
+}
+export interface Conciliacao {
+  /** primeiro mês com lançamentos no Finanças (AAAA-MM) */
+  inicio: string | null
+  meses: MesConciliacao[]
+  semLancamento: (MovConciliacao & { candidato: { id: string; data: string; descricao: string } | null })[]
+  /** movimentações sem lançamento anteriores ao início do Finanças (não listadas) */
+  semLancamentoAntes: number
+}

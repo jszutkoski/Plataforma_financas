@@ -1,5 +1,6 @@
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, LineChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { ItemCategoria, PontoDiario, ResumoMes } from '@fin/lib/analytics'
+import type { MesProjetado, PontoTendencia } from '@fin/lib/projecao'
 import { fmtBRL, fmtCompact, fmtDataCurta, fmtPct, nomeMesCurto } from '@fin/lib/format'
 import { CORES, Legenda, Tip, eixo, grade, tickBRL } from './common'
 
@@ -195,3 +196,54 @@ export function AnosChart({ dados }: { dados: { ano: number; Renda: number; Gast
     </div>
   )
 }
+
+/** Projeção: renda, gastos e aportes previstos por mês, com o saldo acumulado em linha. */
+export function ProjecaoChart({ meses }: { meses: MesProjetado[] }) {
+  const dados = meses.map((m) => ({ mes: `${nomeMesCurto(m.mes)}/${String(m.ano).slice(2)}`, Renda: r0(m.renda + Math.max(0, m.ajustes)), Gastos: r0(m.gastos - Math.min(0, m.ajustes)), Investimentos: m.aportes || null, 'Saldo acumulado': m.acumulado }))
+  return (
+    <div>
+      <div style={{ height: 280 }}>
+        <ResponsiveContainer>
+          <ComposedChart data={dados} margin={{ left: 4, right: 8, top: 8, bottom: 0 }} barGap={2} barCategoryGap="22%">
+            <CartesianGrid {...grade} />
+            <XAxis dataKey="mes" {...eixo} />
+            <YAxis tickFormatter={tickBRL} {...eixo} width={78} />
+            <ReferenceLine y={0} stroke="var(--axis)" />
+            <Tooltip cursor={{ fill: 'var(--surface-2)' }} content={<Tip />} />
+            <Bar dataKey="Renda" fill={CORES.renda} radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar dataKey="Gastos" fill={CORES.gastos} radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar dataKey="Investimentos" fill={CORES.invest} radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Line dataKey="Saldo acumulado" stroke={CORES.saldo} strokeWidth={2} dot={{ r: 3, fill: 'var(--surface)', strokeWidth: 2 }} activeDot={{ r: 5 }} type="monotone" />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <Legenda itens={[{ nome: 'Renda líquida + ajustes', cor: CORES.renda }, { nome: 'Gastos previstos', cor: CORES.gastos }, { nome: 'Investimentos recorrentes', cor: CORES.invest }, { nome: 'Saldo acumulado', cor: CORES.saldo }]} />
+    </div>
+  )
+}
+
+/** Tendência de uma categoria: valor mensal, média móvel de 3 meses e média do período. */
+export function TendenciaChart({ pontos, onClickMes }: { pontos: PontoTendencia[]; onClickMes?: (ano: number, mes: number) => void }) {
+  const media = pontos.length ? pontos.reduce((s, p) => s + p.valor, 0) / pontos.length : 0
+  const dados = pontos.map((p) => ({ mes: `${nomeMesCurto(p.mes)}/${String(p.ano).slice(2)}`, ano: p.ano, n: p.mes, 'No mês': p.valor, 'Média móvel (3 meses)': p.media3 }))
+  return (
+    <div>
+      <div style={{ height: 280 }}>
+        <ResponsiveContainer>
+          <ComposedChart data={dados} margin={{ left: 4, right: 8, top: 8, bottom: 0 }} barCategoryGap="18%" onClick={(s) => { const idx = (s as { activeIndex?: number | string | null })?.activeIndex; const p = idx != null ? dados[Number(idx)] : undefined; if (p && onClickMes) onClickMes(p.ano, p.n) }}>
+            <CartesianGrid {...grade} />
+            <XAxis dataKey="mes" {...eixo} interval="preserveStartEnd" minTickGap={12} />
+            <YAxis tickFormatter={tickBRL} {...eixo} width={78} />
+            <Tooltip cursor={{ fill: 'var(--surface-2)' }} content={<Tip />} />
+            <ReferenceLine y={media} stroke="var(--muted)" strokeDasharray="4 4" />
+            <Bar dataKey="No mês" fill={CORES.gastos} radius={[3, 3, 0, 0]} maxBarSize={22} />
+            <Line dataKey="Média móvel (3 meses)" stroke={CORES.saldo} strokeWidth={2} dot={false} type="monotone" connectNulls={false} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <Legenda itens={[{ nome: 'Gasto no mês', cor: CORES.gastos }, { nome: 'Média móvel de 3 meses', cor: CORES.saldo }, { nome: `Média do período (${fmtBRL(media)})`, cor: 'var(--muted)' }]} />
+    </div>
+  )
+}
+
+const r0 = (v: number) => Math.round(v * 100) / 100

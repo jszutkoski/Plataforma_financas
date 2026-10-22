@@ -37,6 +37,14 @@ export function Lancamentos() {
     const l = lancamentos.find((x) => x.id === id)
     if (l) { setEditar(l); setParams({}, { replace: true }) }
   }, [params, lancamentos, setParams])
+  // filtros vindos de outras telas (tendência, busca): ?cat=&sub=&ano=&mes= ou ?q=
+  useEffect(() => {
+    if (params.get('id') || ![...params.keys()].length) return
+    const ano = Number(params.get('ano')), mes = Number(params.get('mes'))
+    setCat(params.get('cat') ?? ''); setSub(params.get('sub') ?? ''); setQ(params.get('q') ?? ''); setTipo('')
+    if (ano && mes) { p.irPara(ano, mes); setPeriodo('mes') } else setPeriodo('tudo')
+    setParams({}, { replace: true })
+  }, [params, setParams, p])
 
   const filtrados = useMemo(() => {
     const qn = q.trim().toLowerCase()

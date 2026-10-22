@@ -10,7 +10,7 @@ import { validar } from './validar.ts'
 import { ErroApp, erro, errosDeValidacao } from '../erros.ts'
 import * as financas from '../financas/api.ts'
 import { DB_PATH as FINANCAS_DB } from '../financas/db.ts'
-import type { Backup, Info, Movimentacao, Posicao, FluxoConsolidado, Fechamento, Conta } from '../../shared/patrimonio/types.ts'
+import type { Backup, Info, Movimentacao, Posicao, FluxoConsolidado, Fechamento, Conta, Conciliacao } from '../../shared/patrimonio/types.ts'
 import { chaveMes } from '../../shared/patrimonio/types.ts'
 import type { Lancamento } from '../../shared/financas/types.ts'
 
@@ -351,6 +351,85 @@ export function financasLancamento({ movimentacaoId }: { movimentacaoId: string 
   })
   salvar('movimentacoes', { ...m!, financasId: l.id })
   return { ok: true as const, financasId: l.id }
+}
+
+// ---------------------------------------------------------------- conciliação Finanças × Patrimônio
+const ENTRADAS = ['compra', 'aplicacao']
+const SAIDAS = ['venda', 'resgate', 'amortizacao']
+const r2c = (v: number) => Math.round(v * 100) / 100
+
+/**
+ * Mês a mês, desde o primeiro mês com lançamentos no Finanças: o líquido investido lá (investimento − resgate),
+ * o aporte consolidado aqui e as movimentações pagas com dinheiro de conta. Só lê; nada é ajustado sozinho.
+ */
+export function conciliacao(): Conciliacao {
+  const todos = financas.lancamentos() as Lancamento[]
+  const fin = todos.filter((l) => !l.foraDoFluxo && (l.tipo === 'investimento' || l.tipo === 'resgate'))
+  const movs = listar<Movimentacao>('movimentacoes')
+  const fluxos = listar<FluxoConsolidado>('fluxosConsolidados')
+  const nomeInv = new Map(listar<{ id: string; nome: string }>('investimentos').map((i) => [i.id, i.nome]))
+  const movPorLanc = new Map(movs.filter((m) => m.financasId).map((m) => [m.financasId!, m.id]))
+  const externas = movs.filter((m) => m.origemRecurso === 'externo' && [...ENTRADAS, ...SAIDAS].includes(m.tipo) && m.ano && m.mes)
+  const inicio = todos.filter((l) => !l.foraDoFluxo).reduce<string | null>((min, l) => { const k = chaveMes(l.ano, l.mes); return !min || k < min ? k : min }, null)
+  if (!inicio) return { inicio: null, meses: [], semLancamento: [], semLancamentoAntes: 0 }
+
+  const chaves = new Set<string>()
+  for (const l of fin) chaves.add(chaveMes(l.ano, l.mes))
+  for (const f of fluxos) if (chaveMes(f.ano, f.mes) >= inicio && f.aportesLiquidos != null) chaves.add(chaveMes(f.ano, f.mes))
+  for (const m of externas) if (chaveMes(m.ano!, m.mes!) >= inicio) chaves.add(chaveMes(m.ano!, m.mes!))
+
+  const itemMov = (m: Movimentacao) => ({ id: m.id, data: m.data, tipo: m.tipo, valor: m.valor ?? 0, entrada: ENTRADAS.includes(m.tipo), investimento: m.investimentoId ? nomeInv.get(m.investimentoId) ?? null : null, financasId: m.financasId })
+  const meses = [...chaves].sort().reverse().map((k) => {
+    const [ano, mes] = k.split('-').map(Number)
+    const itens = fin.filter((l) => l.ano === ano && l.mes === mes).sort((a, b) => a.data.localeCompare(b.data))
+      .map((l) => ({ id: l.id, data: l.data, tipo: l.tipo as 'investimento' | 'resgate', valor: l.valor, descricao: l.descricao, conta: l.conta, subcategoria: l.subcategoria, movimentacaoId: movPorLanc.get(l.id) ?? null }))
+    const investimentos = r2c(itens.filter((i) => i.tipo === 'investimento').reduce((s, i) => s + i.valor, 0))
+    const resgates = r2c(itens.filter((i) => i.tipo === 'resgate').reduce((s, i) => s + i.valor, 0))
+    const liquido = r2c(investimentos - resgates)
+    const fluxo = fluxos.find((f) => f.ano === ano && f.mes === mes) ?? null
+    const aporte = fluxo?.aportesLiquidos ?? null
+    const movimentacoes = externas.filter((m) => m.ano === ano && m.mes === mes).sort((a, b) => (a.data ?? '').localeCompare(b.data ?? '')).map(itemMov)
+    const liquidoMovs = r2c(movimentacoes.reduce((s, m) => s + (m.entrada ? m.valor : -m.valor), 0))
+    const importadoDoFinancas = !!fluxo?.origem?.startsWith('financas')
+    const desatualizado = importadoDoFinancas && (fluxo!.financasIds.length !== itens.length || fluxo!.financasIds.some((id) => !itens.some((i) => i.id === id)))
+    const situacao = aporte == null ? (itens.length ? 'nao_importado' : 'so_patrimonio')
+      : Math.abs(aporte - liquido) < 0.005 ? (desatualizado ? 'desatualizado' : 'confere') : itens.length ? 'diferente' : 'so_patrimonio'
+    return { ano, mes, itens, investimentos, resgates, liquido, aporte, origemAporte: fluxo?.origem ?? null, movimentacoes, liquidoMovs, diferenca: aporte == null ? null : r2c(aporte - liquido), situacao: situacao as Conciliacao['meses'][number]['situacao'] }
+  })
+  const semLanc = externas.filter((m) => !m.financasId)
+  const semLancamento = semLanc.filter((m) => chaveMes(m.ano!, m.mes!) >= inicio).sort((a, b) => (b.data ?? '').localeCompare(a.data ?? '')).map((m) => {
+    const it = itemMov(m)
+    // lançamento já existente no Finanças com mesmo mês, sentido e valor, ainda sem movimentação: candidato a vincular
+    const candidato = fin.find((l) => l.ano === m.ano && l.mes === m.mes && !movPorLanc.has(l.id) && (l.tipo === 'investimento') === it.entrada && Math.abs(l.valor - it.valor) < 0.005)
+    return { ...it, candidato: candidato ? { id: candidato.id, data: candidato.data, descricao: candidato.descricao } : null }
+  })
+  return { inicio, meses, semLancamento, semLancamentoAntes: semLanc.length - semLancamento.length }
+}
+
+/** Cria aqui a movimentação (aplicação ou resgate) de um lançamento de investimento/resgate do Finanças. */
+export function criarMovimentacaoDoFinancas({ lancamentoId, investimentoId }: { lancamentoId: string; investimentoId: string }) {
+  const l = (financas.lancamentos() as Lancamento[]).find((x) => x.id === lancamentoId)
+  if (!l) erro('Lançamento não encontrado no Finanças.')
+  if (l!.tipo !== 'investimento' && l!.tipo !== 'resgate') erro('Só lançamentos de investimento ou resgate viram movimentação.')
+  const ja = listar<Movimentacao>('movimentacoes').find((m) => m.financasId === l!.id)
+  if (ja) erro('Este lançamento já tem movimentação no Patrimônio.', { movimentacaoId: ja.id })
+  if (!obter('investimentos', investimentoId)) erro('Escolha o investimento.')
+  const conta = l!.conta ? listar<Conta>('contas').find((c) => c.financasNome === l!.conta || c.nome === l!.conta) : null
+  return criar({ t: 'movimentacoes', item: {
+    investimentoId, tipo: l!.tipo === 'investimento' ? 'aplicacao' : 'resgate', data: l!.data, valor: l!.valor, quantidade: null, preco: null, taxas: null, irrf: null,
+    origemRecurso: 'externo', contaId: conta?.id ?? null, foraDaPosicao: false, observacoes: l!.descricao, origem: `financas:${l!.id}`, origemArquivo: null, situacao: 'confirmada', financasId: l!.id,
+  } })
+}
+
+/** Liga uma movimentação a um lançamento que já existe no Finanças (sem criar nada novo). */
+export function vincularFinancas({ movimentacaoId, lancamentoId }: { movimentacaoId: string; lancamentoId: string }) {
+  const m = obter<Movimentacao>('movimentacoes', movimentacaoId)
+  if (!m) erro('Movimentação não encontrada.')
+  if (m!.financasId) erro('Esta movimentação já está ligada a um lançamento.')
+  const l = (financas.lancamentos() as Lancamento[]).find((x) => x.id === lancamentoId)
+  if (!l || (l.tipo !== 'investimento' && l.tipo !== 'resgate')) erro('Lançamento de investimento/resgate não encontrado.')
+  if (listar<Movimentacao>('movimentacoes').some((x) => x.financasId === lancamentoId)) erro('Esse lançamento já está ligado a outra movimentação.')
+  return salvar<Movimentacao>('movimentacoes', { ...m!, financasId: lancamentoId })
 }
 
 function categoriaFinancas(cat: string | null): string {

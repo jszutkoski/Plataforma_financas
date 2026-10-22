@@ -10,6 +10,8 @@ import { Categorias } from '@fin/pages/Categorias'
 import { Importar as FinImportar } from '@fin/pages/Importar'
 import { Projetos } from '@fin/pages/Projetos'
 import { Dados as FinDados } from '@fin/pages/Dados'
+import { Projecao } from '@fin/pages/Projecao'
+import { Tendencia } from '@fin/pages/Tendencia'
 import { Dashboard as PatDashboard } from '@pat/pages/Dashboard'
 import { Anos } from '@pat/pages/Anos'
 import { AtualizarMes } from '@pat/pages/AtualizarMes'
@@ -18,6 +20,7 @@ import { Movimentacoes } from '@pat/pages/Movimentacoes'
 import { BensDividas } from '@pat/pages/Bens'
 import { Importar as PatImportar } from '@pat/pages/Importar'
 import { Dados as PatDados } from '@pat/pages/Dados'
+import { Conciliacao } from '@pat/pages/Conciliacao'
 
 export default function App() {
   return (
@@ -35,6 +38,8 @@ export default function App() {
                   <Route path="categorias" element={<Categorias />} />
                   <Route path="importar" element={<FinImportar />} />
                   <Route path="projetos" element={<Projetos />} />
+                  <Route path="projecao" element={<Projecao />} />
+                  <Route path="tendencias" element={<Tendencia />} />
                   <Route path="dados" element={<FinDados />} />
                 </Route>
                 <Route path="patrimonio">
@@ -45,6 +50,7 @@ export default function App() {
                   <Route path="movimentacoes" element={<Movimentacoes />} />
                   <Route path="bens" element={<BensDividas />} />
                   <Route path="importar" element={<PatImportar />} />
+                  <Route path="conciliacao" element={<Conciliacao />} />
                   <Route path="dados" element={<PatDados />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/financas" replace />} />

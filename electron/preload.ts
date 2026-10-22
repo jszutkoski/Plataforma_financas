@@ -11,4 +11,14 @@ contextBridge.exposeInMainWorld('appApi', {
   salvarArquivo: (nome: string, conteudo: string) => ipcRenderer.invoke('app:salvar-arquivo', nome, conteudo),
   abrirPasta: (alvo: string) => ipcRenderer.invoke('app:abrir-pasta', alvo),
   info: () => ipcRenderer.invoke('app:info'),
+  atualizacao: {
+    verificar: () => ipcRenderer.invoke('app:atualizacao-verificar'),
+    instalar: () => ipcRenderer.invoke('app:atualizacao-instalar'),
+    reiniciar: () => ipcRenderer.invoke('app:reiniciar'),
+    aoProgredir: (fn: (pct: number) => void) => {
+      const ouvinte = (_e: unknown, pct: number) => fn(pct)
+      ipcRenderer.on('app:atualizacao-progresso', ouvinte)
+      return () => { ipcRenderer.removeListener('app:atualizacao-progresso', ouvinte) }
+    },
+  },
 })

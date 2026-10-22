@@ -7,6 +7,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
+import * as atualizacao from './atualizacao.ts'
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL
 const RAIZ = path.join(__dirname, '..')
@@ -71,6 +72,11 @@ async function registrarCanais() {
   })
 
   ipcMain.handle('app:abrir-pasta', (_e, alvo: string) => shell.showItemInFolder(alvo))
+  // atualização: só quando o usuário pede (nenhuma consulta automática ao abrir)
+  const resultado = async <T>(fn: () => Promise<T> | T) => { try { return { ok: true, dados: await fn() } } catch (e) { return { ok: false, erro: (e as Error).message ?? String(e) } } }
+  ipcMain.handle('app:atualizacao-verificar', () => resultado(() => atualizacao.verificar()))
+  ipcMain.handle('app:atualizacao-instalar', (e) => resultado(() => atualizacao.instalar(e.sender)))
+  ipcMain.handle('app:reiniciar', () => atualizacao.reiniciar())
   ipcMain.handle('app:info', () => ({ versao: app.getVersion(), pastaDados: pastaDados(), electron: process.versions.electron, node: process.versions.node }))
 }
 

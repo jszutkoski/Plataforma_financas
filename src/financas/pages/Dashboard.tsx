@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
+import { useStore as usePat } from '@pat/lib/store'
+import { patrimonioEm } from '@pat-shared/calc'
 import { useStore } from '@fin/lib/store'
 import { usePeriodo } from '@fin/lib/periodo'
 import { anosDisponiveis, mesesComDados, resumoMes, mesAnterior, mediaAnteriores, gastosPorCategoria, gastosPorCategoriaAno, evolucaoDiaria, variacaoCategorias, descricaoMensal, resumoAno, despesasIncomuns } from '@fin/lib/analytics'
@@ -51,7 +53,7 @@ function Mensal() {
 
   return (
     <>
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         <Kpi rotulo="Renda líquida" valor={r.renda} cor={CORES.renda} delta={ant.temDados ? delta(r.renda, ant.renda) : null} deltaRotulo={prevNome} sub={r.deducoes ? `bruta ${fmtBRL(r.receitaBruta)} − descontos ${fmtBRL(r.deducoes)}` : undefined} />
         <Kpi rotulo="Gastos totais" valor={r.gastos} cor={CORES.gastos} delta={ant.temDados ? delta(r.gastos, ant.gastos) : null} deltaRotulo={prevNome} invertido sub={`${fmtPct(r.pctComprometido)} da renda`} />
         <Kpi rotulo="Aportes em investimentos" valor={r.aportes} cor={CORES.invest} sub={`${fmtPct(r.pctInvestido)} da renda${r.resgates ? ` · resgates ${fmtBRL(r.resgates)}` : ''}`} />
@@ -65,10 +67,11 @@ function Mensal() {
             <div className="flex justify-between gap-2"><dt className="text-muted">Saldo médio anterior</dt><dd className="tnum">{media ? fmtBRL(media.saldo) : '—'}</dd></div>
           </dl>
         </div>
+        <CardPatrimonio ano={ano} mes={mes} aporteFinancas={r.aportes - r.resgates} temAporte={r.aportes > 0 || r.resgates > 0} />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Card title={catSel ? `Subcategorias de ${catSel}` : 'Gastos por categoria'} subtitle={catSel ? 'Clique em voltar para ver todas as categorias' : 'Clique em uma barra para detalhar'} actions={catSel && <button className="btn-ghost !py-1 text-xs" onClick={() => setCatSel(null)}>← voltar</button>}>
+        <Card title={catSel ? `Subcategorias de ${catSel}` : 'Gastos por categoria'} subtitle={catSel ? 'Clique em voltar para ver todas as categorias' : 'Clique em uma barra para detalhar'} actions={catSel && <div className="flex gap-1"><Link className="btn-ghost !py-1 text-xs" to={`/financas/tendencias?${new URLSearchParams({ cat: catSel })}`}>ver tendência ↗</Link><button className="btn-ghost !py-1 text-xs" onClick={() => setCatSel(null)}>← voltar</button></div>}>
           <CategoriasBarras itens={catSel ? subs : cats} total={r.gastos} onClick={catSel ? undefined : setCatSel} />
         </Card>
         <Card title="Renda, gastos e investimentos" subtitle="Média dos meses anteriores, mês anterior e mês atual">
@@ -117,6 +120,33 @@ function Mensal() {
         </Card>
       )}
     </>
+  )
+}
+
+/** Patrimônio líquido do mês (do Patrimônio) e se o aporte do mês confere com o Finanças. */
+function CardPatrimonio({ ano, mes, aporteFinancas, temAporte }: { ano: number; mes: number; aporteFinancas: number; temAporte: boolean }) {
+  const { base, ix, oculto } = usePat()
+  // mês sem fechamento (ainda não atualizado no Patrimônio): mostra o último fechamento dos 6 meses anteriores
+  const atual = useMemo(() => {
+    let m = { ano, mes }
+    for (let i = 0; i < 7; i++) { const p = patrimonioEm(base, ix, m.ano, m.mes); if (p.liquido != null) return p; m = mesAnterior(m.ano, m.mes) }
+    return patrimonioEm(base, ix, ano, mes)
+  }, [base, ix, ano, mes])
+  const outroMes = atual.ano !== ano || atual.mes !== mes
+  const ant = useMemo(() => { const m = mesAnterior(atual.ano, atual.mes); return patrimonioEm(base, ix, m.ano, m.mes) }, [base, ix, atual.ano, atual.mes])
+  const fluxo = base.fluxosConsolidados.find((f) => f.ano === ano && f.mes === mes)
+  const aporte = fluxo?.aportesLiquidos ?? null
+  const situacao = aporte == null ? (temAporte ? { t: 'não importado', ok: false } : null)
+    : Math.abs(aporte - aporteFinancas) < 0.005 ? { t: 'confere', ok: true } : { t: 'difere', ok: false }
+  const variacao = atual.liquido != null && ant.liquido != null ? atual.liquido - ant.liquido : null
+  return (
+    <Link to="/patrimonio" className="card p-4 col-span-2 lg:col-span-1 hover:bg-surface-2 transition-colors">
+      <div className="flex items-center gap-2 text-xs text-ink-2"><span className="inline-block w-2 h-2 rounded-full" style={{ background: CORES.invest }} aria-hidden />Patrimônio líquido{outroMes && atual.liquido != null && <span className="text-muted">({nomeMesCurto(atual.mes)}/{String(atual.ano).slice(2)})</span>}</div>
+      {atual.liquido == null ? <div className="text-sm text-muted mt-1">sem fechamento recente</div>
+        : <div className={`text-xl font-semibold mt-1 tnum truncate ${oculto ? 'oculto' : ''}`}>{fmtBRL(atual.liquido)}</div>}
+      {variacao != null && <div className={`text-xs mt-0.5 ${variacao >= 0 ? 'text-good' : 'text-bad'}`}>{variacao >= 0 ? '▲' : '▼'} <span className={oculto ? 'oculto' : ''}>{fmtBRL(Math.abs(variacao))}</span> <span className="text-muted">vs. {nomeMesCurto(mesAnterior(atual.ano, atual.mes).mes)}</span></div>}
+      {situacao && <div className="text-xs mt-1 text-muted">Aporte do mês: <span className={situacao.ok ? 'tag-ok' : 'tag-warn'}>{situacao.t}</span></div>}
+    </Link>
   )
 }
 

@@ -5,11 +5,11 @@
 import {
   db, DB_PATH, prepararBancoNovo, listarLancamentos, inserirLancamento, atualizarLancamento, validarLancamento,
   rowToLancamento, gerarParcelamento, listarCategorias, rowToCategoria, listarContas, rowToConta, listarRecorrencias,
-  rowToRecorrencia, listarProjetos, rowToProjeto, garantirProjetosDosRazoes, garantirCategoria, newId, getMeta,
+  rowToRecorrencia, listarProjetos, listarAjustesProjecao, rowToProjeto, garantirProjetosDosRazoes, garantirCategoria, newId, getMeta,
   transacao, copiaDeSeguranca,
 } from './db.ts'
 import { erro, errosDeValidacao } from '../erros.ts'
-import type { LancamentoInput, Backup, Recorrencia, Grupo, Categoria } from '../../shared/financas/types.ts'
+import type { LancamentoInput, Backup, Recorrencia, Grupo, Categoria, AjusteProjecao } from '../../shared/financas/types.ts'
 
 /** Erros do SQLite (restrição única etc.) viram uma mensagem legível; os demais seguem como estão. */
 const unico = (e: unknown, mensagem: string): never => { if (String(e).includes('UNIQUE')) erro(mensagem); throw e }
@@ -314,9 +314,28 @@ export function gerarRecorrencias({ ano, mes }: { ano: number; mes: number }) {
   return { criados: criados.length }
 }
 
+// ---------- ajustes da projeção (13º, férias…) ----------
+export const ajustesProjecao = () => listarAjustesProjecao()
+
+export function salvarAjusteProjecao(a: Partial<AjusteProjecao>) {
+  const descricao = String(a.descricao ?? '').trim()
+  if (!descricao) erro('Informe a descrição.')
+  if (!Number.isInteger(a.ano) || !Number.isInteger(a.mes) || a.mes! < 1 || a.mes! > 12) erro('Mês inválido.')
+  if (typeof a.valor !== 'number' || !Number.isFinite(a.valor) || a.valor === 0) erro('Informe um valor diferente de zero.')
+  const id = a.id || newId('aj')
+  db.prepare(`INSERT INTO ajustes_projecao (id, ano, mes, descricao, valor) VALUES (?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET ano = excluded.ano, mes = excluded.mes, descricao = excluded.descricao, valor = excluded.valor`).run(id, a.ano!, a.mes!, descricao, a.valor!)
+  return listarAjustesProjecao().find((x) => x.id === id)!
+}
+
+export function excluirAjusteProjecao({ id }: { id: string }) {
+  db.prepare('DELETE FROM ajustes_projecao WHERE id = ?').run(id)
+  return { ok: true as const }
+}
+
 // ---------- dados: backup / restauração / limpeza ----------
 export function backup(): Backup {
-  return { versao: 1, geradoEm: new Date().toISOString(), lancamentos: listarLancamentos(), categorias: listarCategorias(), contas: listarContas(), recorrencias: listarRecorrencias(), projetos: listarProjetos() }
+  return { versao: 1, geradoEm: new Date().toISOString(), lancamentos: listarLancamentos(), categorias: listarCategorias(), contas: listarContas(), recorrencias: listarRecorrencias(), projetos: listarProjetos(), ajustesProjecao: listarAjustesProjecao() }
 }
 
 /**
@@ -344,7 +363,7 @@ export function restaurar({ b, modo = 'substituir' }: { b: Backup; modo: 'substi
   const copia = modo === 'substituir' ? copiaDeSeguranca('antes-de-restaurar') : null
   return transacao(() => {
     if (modo === 'substituir') {
-      db.exec('DELETE FROM lancamentos; DELETE FROM categorias; DELETE FROM contas; DELETE FROM recorrencias; DELETE FROM projetos;')
+      db.exec('DELETE FROM lancamentos; DELETE FROM categorias; DELETE FROM contas; DELETE FROM recorrencias; DELETE FROM projetos; DELETE FROM ajustes_projecao;')
     }
     let n = 0
     for (const l of b.lancamentos) {
@@ -356,6 +375,7 @@ export function restaurar({ b, modo = 'substituir' }: { b: Backup; modo: 'substi
     for (const r of b.recorrencias ?? []) db.prepare(`INSERT OR IGNORE INTO recorrencias (id, descricao, valor, tipo, grupo, categoria, subcategoria, conta, forma_pagamento, dia, inicio, fim, observacoes, ativo)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(r.id, r.descricao, r.valor, r.tipo, r.grupo, r.categoria, r.subcategoria, r.conta, r.formaPagamento, r.dia, r.inicio, r.fim, r.observacoes, r.ativo ? 1 : 0)
     for (const p of b.projetos ?? []) db.prepare('INSERT OR IGNORE INTO projetos (nome, descricao, criado_em) VALUES (?,?,?)').run(p.nome, p.descricao, p.criadoEm)
+    for (const a of b.ajustesProjecao ?? []) db.prepare('INSERT OR IGNORE INTO ajustes_projecao (id, ano, mes, descricao, valor) VALUES (?,?,?,?,?)').run(a.id, a.ano, a.mes, a.descricao, a.valor)
     garantirProjetosDosRazoes() // backups antigos (sem projetos) ganham um projeto por nome de custo
     return { ok: true as const, lancamentos: n, copia }
   })
@@ -371,7 +391,7 @@ export function backupArquivo() {
 export function limpar({ confirmar }: { confirmar: string }) {
   if (confirmar !== 'APAGAR TUDO') erro('Confirmação inválida.')
   const copia = copiaDeSeguranca('antes-de-apagar')
-  transacao(() => db.exec('DELETE FROM lancamentos; DELETE FROM categorias; DELETE FROM contas; DELETE FROM recorrencias; DELETE FROM projetos;'))
+  transacao(() => db.exec('DELETE FROM lancamentos; DELETE FROM categorias; DELETE FROM contas; DELETE FROM recorrencias; DELETE FROM projetos; DELETE FROM ajustes_projecao;'))
   return { ok: true as const, copia }
 }
 

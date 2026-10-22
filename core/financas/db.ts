@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Lancamento, LancamentoInput, Categoria, Conta, Recorrencia, TipoLancamento, Grupo, Projeto } from '../../shared/financas/types.ts'
+import type { Lancamento, LancamentoInput, Categoria, Conta, Recorrencia, TipoLancamento, Grupo, Projeto, AjusteProjecao } from '../../shared/financas/types.ts'
 
 /** Pasta base quando nenhum caminho é informado (no aplicativo, quem manda é a variável de ambiente). */
 export const ROOT = process.cwd()
@@ -119,6 +119,14 @@ CREATE TABLE IF NOT EXISTS projetos (
   nome TEXT NOT NULL UNIQUE,
   descricao TEXT,
   criado_em TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ajustes_projecao (
+  id TEXT PRIMARY KEY,
+  ano INTEGER NOT NULL,
+  mes INTEGER NOT NULL,
+  descricao TEXT NOT NULL,
+  valor REAL NOT NULL
 );
 `)
 
@@ -326,6 +334,11 @@ export function rowToRecorrencia(r: Row): Recorrencia {
     inicio: r.inicio as string, fim: (r.fim as string) ?? null, observacoes: (r.observacoes as string) ?? null, ativo: !!r.ativo,
   }
 }
+export function listarAjustesProjecao(): AjusteProjecao[] {
+  return (db.prepare('SELECT * FROM ajustes_projecao ORDER BY ano, mes, descricao').all() as Row[])
+    .map((r) => ({ id: r.id as string, ano: r.ano as number, mes: r.mes as number, descricao: r.descricao as string, valor: r.valor as number }))
+}
+
 export function listarRecorrencias(): Recorrencia[] {
   return (db.prepare('SELECT * FROM recorrencias ORDER BY dia, descricao').all() as Row[]).map(rowToRecorrencia)
 }

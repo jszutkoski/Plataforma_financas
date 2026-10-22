@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '@pat/lib/store'
+import { useStore as useFin } from '@fin/lib/store'
 import { api } from '@pat/lib/api'
 import { Card, Valor, Tag, Confirm, Vazio } from '@pat/components/ui'
 import { MovimentacaoForm } from '@pat/components/MovimentacaoForm'
@@ -9,6 +10,7 @@ import { TIPOS_MOV, TIPO_MOV_LABEL, ORIGEM_RECURSO_LABEL, type Movimentacao } fr
 
 export function Movimentacoes() {
   const { base, ix, recarregar, aviso, anos, info } = useStore()
+  const fin = useFin()
   const [ano, setAno] = useState<string>('')
   const [tipo, setTipo] = useState('')
   const [invId, setInvId] = useState('')
@@ -24,7 +26,7 @@ export function Movimentacoes() {
   const registrarFinancas = async (m: Movimentacao) => {
     if (registrando) return // um clique por vez: evita criar o lançamento duas vezes
     setRegistrando(m.id)
-    try { const r = await api.financasLancamento(m.id); aviso(r.jaExistia ? 'Já existia no Finanças; vínculo registrado.' : 'Lançamento criado no Finanças.'); await recarregar() } catch (e) { aviso((e as Error).message, 'erro') } finally { setRegistrando(null) }
+    try { const r = await api.financasLancamento(m.id); aviso(r.jaExistia ? 'Já existia no Finanças; vínculo registrado.' : 'Lançamento criado no Finanças.'); await Promise.all([recarregar(), fin.recarregar()]) } catch (e) { aviso((e as Error).message, 'erro') } finally { setRegistrando(null) }
   }
 
   return (

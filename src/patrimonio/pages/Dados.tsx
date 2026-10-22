@@ -1,29 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { Link } from 'react-router'
 import { useStore } from '@pat/lib/store'
-import { api, type FluxoFinancas } from '@pat/lib/api'
+import { api } from '@pat/lib/api'
 import { Card, Confirm, Modal, Valor, Vazio } from '@pat/components/ui'
 import { baixarCSV, baixarJSON } from '@pat/lib/csv'
-import { fmtData, fmtMesAno } from '@pat/lib/format'
+import { fmtData } from '@pat/lib/format'
 import type { Backup } from '@pat-shared/types'
 
 export function Dados() {
   const { base, info, pendencias, alteracoes, recarregar, aviso } = useStore()
-  const [fluxos, setFluxos] = useState<{ disponivel: boolean; caminho?: string; meses: FluxoFinancas[] } | null>(null)
   const [restaurar, setRestaurar] = useState<{ b: Backup; modo: 'substituir' | 'mesclar' } | null>(null)
   const [limpar, setLimpar] = useState(false)
   const [confirmaTexto, setConfirmaTexto] = useState('')
-  const [conflito, setConflito] = useState<{ ano: number; mes: number; atual: number; novo: number } | null>(null)
 
-  useEffect(() => { api.financasFluxos().then(setFluxos).catch(() => setFluxos({ disponivel: false, meses: [] })) }, [base])
 
   const contagens = info?.contagens ?? {}
   const lerBackup = async (f: File | null, modo: 'substituir' | 'mesclar') => {
     if (!f) return
     try { const b = JSON.parse(await f.text()) as Backup; if (b.versao !== 2 || b.app !== 'patrimonio') throw new Error('não é um backup do Patrimônio (versão 2)'); setRestaurar({ b, modo }) } catch (e) { aviso(`Arquivo inválido: ${(e as Error).message}`, 'erro') }
-  }
-  const importarFluxo = async (m: FluxoFinancas, substituir = false) => {
-    try { await api.financasImportarFluxo(m.ano, m.mes, substituir); aviso(`Aporte líquido de ${fmtMesAno(m.ano, m.mes)} importado do Finanças.`); await recarregar() }
-    catch (e) { const c = (e as Error & { corpo?: { conflito?: boolean; atual?: { aportesLiquidos: number }; novo?: number } }).corpo; if (c?.conflito) setConflito({ ano: m.ano, mes: m.mes, atual: c.atual!.aportesLiquidos, novo: c.novo! }); else aviso((e as Error).message, 'erro') }
   }
   const resolverPend = async (id: string, resolvido: boolean) => { try { await api.atualizar('pendencias', id, { resolvido }); await recarregar() } catch (e) { aviso((e as Error).message, 'erro') } }
 
@@ -57,18 +51,9 @@ export function Dados() {
         </div>
       </Card>
 
-      <Card title="Integração com o app Finanças" subtitle={fluxos?.disponivel ? `Banco do Finanças encontrado em ${fluxos.caminho} (leitura direta, somente leitura).` : 'Banco do app Finanças não encontrado. Configure o caminho na variável FINANCAS_DB.'}>
+      <Card title="Integração com o Finanças" subtitle="Os dois apps usam bancos separados no mesmo processo.">
         <a id="financas" />
-        <p className="text-sm text-ink-2 mb-2">Finanças cuida do fluxo de caixa; Patrimônio, das posições. A ponte: (1) o <strong>aporte líquido</strong> de cada mês pode ser importado dos lançamentos investimento/resgate do Finanças (com os ids guardados, sem duplicar); (2) uma aplicação/resgate registrada aqui com dinheiro externo pode gerar o lançamento de caixa no Finanças (tela Movimentações → "→ Finanças"; exige o Finanças rodando em {info?.financas.api}). Aplicações nunca viram despesa, nem resgates viram renda.</p>
-        {fluxos?.disponivel && fluxos.meses.length > 0 && (
-          <div className="overflow-x-auto max-h-80 overflow-y-auto"><table className="data text-xs whitespace-nowrap">
-            <thead><tr><th>Mês</th><th className="text-right">Investimentos</th><th className="text-right">Resgates</th><th className="text-right">Líquido</th><th className="text-right">No Patrimônio</th><th>Situação</th><th></th></tr></thead>
-            <tbody>{[...fluxos.meses].reverse().map((m) => { const f = base.fluxosConsolidados.find((x) => x.ano === m.ano && x.mes === m.mes); const igual = f?.aportesLiquidos != null && Math.abs(f.aportesLiquidos - m.liquido) < 0.005 && !m.desatualizado; return (
-              <tr key={`${m.ano}-${m.mes}`}><td>{fmtMesAno(m.ano, m.mes)}</td><td className="text-right"><Valor v={m.investimentos} /></td><td className="text-right"><Valor v={m.resgates} /></td><td className="text-right"><Valor v={m.liquido} sinal /></td><td className="text-right"><Valor v={f?.aportesLiquidos} vazio="—" /></td>
-                <td>{!f ? <span className="text-muted">não importado</span> : igual ? <span className="tag-ok">confere{f.origem?.startsWith('financas') ? ' (importado)' : ''}</span> : <span className="tag-warn">{m.desatualizado ? 'lançamentos do Finanças mudaram depois da importação' : 'valor diferente do registrado'}</span>}</td>
-                <td className="text-right">{(!f || !igual) && <button className="btn-ghost !py-0.5 !px-2" onClick={() => importarFluxo(m)}>Importar</button>}</td></tr>) })}</tbody>
-          </table></div>
-        )}
+        <p className="text-sm text-ink-2">Finanças cuida do fluxo de caixa; Patrimônio, das posições. A comparação mês a mês, a importação do aporte líquido e a ligação entre lançamentos e movimentações ficam em <Link className="underline" to="/patrimonio/conciliacao">Conciliação</Link>. Aplicações nunca viram despesa, nem resgates viram renda.</p>
       </Card>
 
       <Card title={`Pendências de revisão (${pendencias.filter((p) => !p.resolvido).length} abertas)`} subtitle="Registros incompletos ou inconsistentes preservados na importação. Nada foi inventado para completá-los.">
@@ -100,9 +85,7 @@ export function Dados() {
         <input className="input mt-2" value={confirmaTexto} onChange={(e) => setConfirmaTexto(e.target.value)} />
         <div className="flex justify-end gap-2 mt-4"><button className="btn-ghost" onClick={() => { setLimpar(false); setConfirmaTexto('') }}>Cancelar</button><button className="btn-danger" disabled={confirmaTexto !== 'APAGAR TUDO'} onClick={async () => { try { const r = await api.limpar(); aviso(`Base apagada.${r.copia ? ` Cópia guardada em ${r.copia}` : ''}`); setLimpar(false); setConfirmaTexto(''); await recarregar() } catch (e) { aviso((e as Error).message, 'erro') } }}>Apagar</button></div>
       </Modal>
-      <Confirm aberto={!!conflito} titulo="Valor diferente já registrado" confirmar="Substituir pelo valor do Finanças" onCancelar={() => setConflito(null)}
-        mensagem={<>Em {conflito && fmtMesAno(conflito.ano, conflito.mes)} o Patrimônio registra aporte líquido de <Valor v={conflito?.atual} sinal /> e o Finanças soma <Valor v={conflito?.novo} sinal />. Nada foi alterado. Se substituir, a alteração fica registrada como correção histórica e o resultado do mês é recalculado.</>}
-        onConfirmar={async () => { const c = conflito!; setConflito(null); await importarFluxo({ ano: c.ano, mes: c.mes } as FluxoFinancas, true) }} />
+
     </div>
   )
 }

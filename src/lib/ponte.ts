@@ -7,7 +7,15 @@ export interface AppApi {
   salvarArquivo: (nome: string, conteudo: string) => Promise<{ ok: boolean; arquivo?: string; cancelado?: boolean }>
   abrirPasta: (alvo: string) => Promise<void>
   info: () => Promise<{ versao: string; pastaDados: string; electron: string; node: string }>
+  atualizacao: {
+    verificar: () => Promise<{ ok: boolean; dados?: Verificacao; erro?: string }>
+    instalar: () => Promise<{ ok: boolean; dados?: { ok: true; versao: string }; erro?: string }>
+    reiniciar: () => Promise<void>
+    aoProgredir: (fn: (pct: number) => void) => () => void
+  }
 }
+
+export interface Verificacao { atual: string; ultima: string; nova: boolean; notas: string; pagina: string; podeInstalar: boolean; motivo: string | null }
 
 declare global {
   interface Window { appApi?: AppApi }
@@ -36,3 +44,11 @@ export async function salvarArquivo(nome: string, conteudo: string): Promise<str
 
 export const abrirPasta = (alvo: string) => api().abrirPasta(alvo)
 export const infoApp = () => api().info()
+
+const desembrulhar = <T,>(r: { ok: boolean; dados?: T; erro?: string }): T => { if (!r.ok) throw new Error(r.erro ?? 'Falha na operação.'); return r.dados as T }
+export const atualizacao = {
+  verificar: async () => desembrulhar(await api().atualizacao.verificar()),
+  instalar: async () => desembrulhar(await api().atualizacao.instalar()),
+  reiniciar: () => api().atualizacao.reiniciar(),
+  aoProgredir: (fn: (pct: number) => void) => api().atualizacao.aoProgredir(fn),
+}

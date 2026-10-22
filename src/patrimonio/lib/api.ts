@@ -1,4 +1,4 @@
-import type { Backup, Info, Movimentacao, Posicao, FluxoConsolidado, Fechamento } from '@pat-shared/types'
+import type { Backup, Info, Movimentacao, Posicao, FluxoConsolidado, Fechamento, Conciliacao } from '@pat-shared/types'
 import type { Base } from '@pat-shared/calc'
 import { chamar } from '@app/lib/ponte'
 
@@ -29,5 +29,8 @@ export const api = {
   financasFluxos: () => chamar<{ disponivel: boolean; caminho?: string; meses: FluxoFinancas[] }>('pat:financasFluxos'),
   financasImportarFluxo: (ano: number, mes: number, substituir = false) => chamar<FluxoConsolidado>('pat:financasImportarFluxo', { ano, mes, substituir }),
   financasContas: () => chamar<{ id: number; nome: string; tipo: string; ativo: number }[]>('pat:financasContas'),
+  conciliacao: () => chamar<Conciliacao>('pat:conciliacao'),
+  criarMovimentacaoDoFinancas: (lancamentoId: string, investimentoId: string) => chamar<Movimentacao>('pat:criarMovimentacaoDoFinancas', { lancamentoId, investimentoId }),
+  vincularFinancas: (movimentacaoId: string, lancamentoId: string) => chamar<Movimentacao>('pat:vincularFinancas', { movimentacaoId, lancamentoId }),
   financasLancamento: (movimentacaoId: string) => chamar<{ ok: true; financasId: string; jaExistia?: boolean }>('pat:financasLancamento', { movimentacaoId }),
 }

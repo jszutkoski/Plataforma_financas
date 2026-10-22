@@ -1,4 +1,4 @@
-import type { Lancamento, LancamentoInput, Categoria, Conta, Recorrencia, Backup, Projeto } from '@fin-shared/types'
+import type { Lancamento, LancamentoInput, Categoria, Conta, Recorrencia, Backup, Projeto, AjusteProjecao } from '@fin-shared/types'
 import { chamar } from '@app/lib/ponte'
 
 export interface Info { banco: string; lancamentos: number; criadoEm: string | null }
@@ -36,6 +36,10 @@ export const api = {
   atualizarRecorrencia: (id: string, r: Recorrencia) => chamar<Recorrencia>('fin:atualizarRecorrencia', { id, r }),
   excluirRecorrencia: (id: string) => chamar<{ ok: true }>('fin:excluirRecorrencia', { id }),
   gerarRecorrencias: (ano: number, mes: number) => chamar<{ criados: number }>('fin:gerarRecorrencias', { ano, mes }),
+
+  ajustesProjecao: () => chamar<AjusteProjecao[]>('fin:ajustesProjecao'),
+  salvarAjusteProjecao: (a: Omit<AjusteProjecao, 'id'> & { id?: string }) => chamar<AjusteProjecao>('fin:salvarAjusteProjecao', a),
+  excluirAjusteProjecao: (id: string) => chamar<{ ok: true }>('fin:excluirAjusteProjecao', { id }),
 
   backup: () => chamar<Backup>('fin:backup'),
   backupArquivo: () => chamar<{ ok: true; arquivo: string }>('fin:backupArquivo'),

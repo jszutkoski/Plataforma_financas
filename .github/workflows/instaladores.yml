@@ -19,14 +19,18 @@ jobs:
           - os: ubuntu-latest
             nome: linux
             comando: npm run dist:linux
+            somas: sha256sum *.AppImage *.deb > SHA256SUMS-linux.txt
             artefatos: |
               release/*.AppImage
               release/*.deb
+              release/SHA256SUMS-linux.txt
           - os: windows-latest
             nome: windows
             comando: npm run dist:win
+            somas: sha256sum *.exe > SHA256SUMS-windows.txt
             artefatos: |
               release/*.exe
+              release/SHA256SUMS-windows.txt
 
     name: ${{ matrix.nome }}
     runs-on: ${{ matrix.os }}
@@ -51,6 +55,12 @@ jobs:
         env:
           # sem certificado de assinatura: o electron-builder não deve tentar assinar
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # o botão "verificar atualização" do app só instala um AppImage cujo SHA-256 confere com este arquivo
+      - name: Somas de verificação (SHA-256)
+        shell: bash
+        working-directory: release
+        run: ${{ matrix.somas }}
 
       - name: Guardar artefatos
         uses: actions/upload-artifact@v4

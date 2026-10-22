@@ -14,7 +14,7 @@
     "build": "npm run build:web && npm run build:electron",
     "start": "npm run build && electron .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
-    "test": "cross-env FINANCAS_DB=:memory: PATRIMONIO_DB=:memory: node --import ./scripts/testes/aliases.mjs --test core/financas/db.test.ts core/financas/persistencia.test.ts core/financas/natureza.test.ts core/financas/estorno.test.ts core/financas/categorias.test.ts src/financas/lib/analytics.test.ts src/financas/lib/import.test.ts core/patrimonio/db.test.ts core/patrimonio/historico.test.ts shared/patrimonio/calc.test.ts shared/patrimonio/auditoria.test.ts",
+    "test": "cross-env FINANCAS_DB=:memory: PATRIMONIO_DB=:memory: node --import ./scripts/testes/aliases.mjs --test core/financas/db.test.ts core/financas/persistencia.test.ts core/financas/natureza.test.ts core/financas/estorno.test.ts core/financas/categorias.test.ts src/financas/lib/analytics.test.ts src/financas/lib/import.test.ts src/financas/lib/projecao.test.ts src/lib/busca.test.ts core/patrimonio/db.test.ts core/patrimonio/historico.test.ts core/patrimonio/conciliacao.test.ts shared/patrimonio/calc.test.ts shared/patrimonio/auditoria.test.ts electron/versao.test.ts",
     "dist:linux": "npm run build && electron-builder --linux --publish never",
     "dist:win": "npm run build && electron-builder --win --publish never"
   },
