@@ -10,7 +10,6 @@ import { Categorias } from '@fin/pages/Categorias'
 import { Importar as FinImportar } from '@fin/pages/Importar'
 import { Projetos } from '@fin/pages/Projetos'
 import { Dados as FinDados } from '@fin/pages/Dados'
-import { Projecao } from '@fin/pages/Projecao'
 import { Tendencia } from '@fin/pages/Tendencia'
 import { Dashboard as PatDashboard } from '@pat/pages/Dashboard'
 import { Anos } from '@pat/pages/Anos'
@@ -38,7 +37,6 @@ export default function App() {
                   <Route path="categorias" element={<Categorias />} />
                   <Route path="importar" element={<FinImportar />} />
                   <Route path="projetos" element={<Projetos />} />
-                  <Route path="projecao" element={<Projecao />} />
                   <Route path="tendencias" element={<Tendencia />} />
                   <Route path="dados" element={<FinDados />} />
                 </Route>

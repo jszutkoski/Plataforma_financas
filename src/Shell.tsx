@@ -11,7 +11,6 @@ const NAV_FIN = [
   { to: '/financas', rotulo: 'Painel', icone: '◫' },
   { to: '/financas/lancamentos', rotulo: 'Lançamentos', icone: '☰' },
   { to: '/financas/recorrentes', rotulo: 'Recorrentes', icone: '↻' },
-  { to: '/financas/projecao', rotulo: 'Projeção', icone: '↗' },
   { to: '/financas/tendencias', rotulo: 'Tendências', icone: '∿' },
   { to: '/financas/categorias', rotulo: 'Categorias', icone: '⌗' },
   { to: '/financas/importar', rotulo: 'Importar', icone: '⇪' },

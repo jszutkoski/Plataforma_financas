@@ -9,7 +9,7 @@ import {
   transacao, copiaDeSeguranca,
 } from './db.ts'
 import { erro, errosDeValidacao } from '../erros.ts'
-import type { LancamentoInput, Backup, Recorrencia, Grupo, Categoria, AjusteProjecao } from '../../shared/financas/types.ts'
+import type { LancamentoInput, Backup, Recorrencia, Grupo, Categoria } from '../../shared/financas/types.ts'
 
 /** Erros do SQLite (restrição única etc.) viram uma mensagem legível; os demais seguem como estão. */
 const unico = (e: unknown, mensagem: string): never => { if (String(e).includes('UNIQUE')) erro(mensagem); throw e }
@@ -312,25 +312,6 @@ export function gerarRecorrencias({ ano, mes }: { ano: number; mes: number }) {
     criados.push(l.id)
   } })
   return { criados: criados.length }
-}
-
-// ---------- ajustes da projeção (13º, férias…) ----------
-export const ajustesProjecao = () => listarAjustesProjecao()
-
-export function salvarAjusteProjecao(a: Partial<AjusteProjecao>) {
-  const descricao = String(a.descricao ?? '').trim()
-  if (!descricao) erro('Informe a descrição.')
-  if (!Number.isInteger(a.ano) || !Number.isInteger(a.mes) || a.mes! < 1 || a.mes! > 12) erro('Mês inválido.')
-  if (typeof a.valor !== 'number' || !Number.isFinite(a.valor) || a.valor === 0) erro('Informe um valor diferente de zero.')
-  const id = a.id || newId('aj')
-  db.prepare(`INSERT INTO ajustes_projecao (id, ano, mes, descricao, valor) VALUES (?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET ano = excluded.ano, mes = excluded.mes, descricao = excluded.descricao, valor = excluded.valor`).run(id, a.ano!, a.mes!, descricao, a.valor!)
-  return listarAjustesProjecao().find((x) => x.id === id)!
-}
-
-export function excluirAjusteProjecao({ id }: { id: string }) {
-  db.prepare('DELETE FROM ajustes_projecao WHERE id = ?').run(id)
-  return { ok: true as const }
 }
 
 // ---------- dados: backup / restauração / limpeza ----------

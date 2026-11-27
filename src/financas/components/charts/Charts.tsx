@@ -1,6 +1,6 @@
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, LineChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { ItemCategoria, PontoDiario, ResumoMes } from '@fin/lib/analytics'
-import type { MesProjetado, PontoTendencia } from '@fin/lib/projecao'
+import type { PontoTendencia } from '@fin/lib/tendencia'
 import { fmtBRL, fmtCompact, fmtDataCurta, fmtPct, nomeMesCurto } from '@fin/lib/format'
 import { CORES, Legenda, Tip, eixo, grade, tickBRL } from './common'
 
@@ -197,31 +197,6 @@ export function AnosChart({ dados }: { dados: { ano: number; Renda: number; Gast
   )
 }
 
-/** Projeção: renda, gastos e aportes previstos por mês, com o saldo acumulado em linha. */
-export function ProjecaoChart({ meses }: { meses: MesProjetado[] }) {
-  const dados = meses.map((m) => ({ mes: `${nomeMesCurto(m.mes)}/${String(m.ano).slice(2)}`, Renda: r0(m.renda + Math.max(0, m.ajustes)), Gastos: r0(m.gastos - Math.min(0, m.ajustes)), Investimentos: m.aportes || null, 'Saldo acumulado': m.acumulado }))
-  return (
-    <div>
-      <div style={{ height: 280 }}>
-        <ResponsiveContainer>
-          <ComposedChart data={dados} margin={{ left: 4, right: 8, top: 8, bottom: 0 }} barGap={2} barCategoryGap="22%">
-            <CartesianGrid {...grade} />
-            <XAxis dataKey="mes" {...eixo} />
-            <YAxis tickFormatter={tickBRL} {...eixo} width={78} />
-            <ReferenceLine y={0} stroke="var(--axis)" />
-            <Tooltip cursor={{ fill: 'var(--surface-2)' }} content={<Tip />} />
-            <Bar dataKey="Renda" fill={CORES.renda} radius={[4, 4, 0, 0]} maxBarSize={28} />
-            <Bar dataKey="Gastos" fill={CORES.gastos} radius={[4, 4, 0, 0]} maxBarSize={28} />
-            <Bar dataKey="Investimentos" fill={CORES.invest} radius={[4, 4, 0, 0]} maxBarSize={28} />
-            <Line dataKey="Saldo acumulado" stroke={CORES.saldo} strokeWidth={2} dot={{ r: 3, fill: 'var(--surface)', strokeWidth: 2 }} activeDot={{ r: 5 }} type="monotone" />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-      <Legenda itens={[{ nome: 'Renda líquida + ajustes', cor: CORES.renda }, { nome: 'Gastos previstos', cor: CORES.gastos }, { nome: 'Investimentos recorrentes', cor: CORES.invest }, { nome: 'Saldo acumulado', cor: CORES.saldo }]} />
-    </div>
-  )
-}
-
 /** Tendência de uma categoria: valor mensal, média móvel de 3 meses e média do período. */
 export function TendenciaChart({ pontos, onClickMes }: { pontos: PontoTendencia[]; onClickMes?: (ano: number, mes: number) => void }) {
   const media = pontos.length ? pontos.reduce((s, p) => s + p.valor, 0) / pontos.length : 0
@@ -245,5 +220,3 @@ export function TendenciaChart({ pontos, onClickMes }: { pontos: PontoTendencia[
     </div>
   )
 }
-
-const r0 = (v: number) => Math.round(v * 100) / 100

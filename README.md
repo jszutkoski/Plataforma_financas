@@ -2,7 +2,7 @@
 
 Aplicativo de computador (Linux e Windows) que reúne em uma janela duas áreas que costumam viver em planilhas separadas:
 
-- **Finanças** — fluxo de caixa mês a mês: renda, gastos, investimentos e saldo; lançamentos com categorias, contas, compras parceladas e competência separada da data; despesas recorrentes; projetos (custos de uma reforma, de um carro, de uma dívida) fora do fluxo mensal; importação de extratos e faturas em CSV/XLSX; projeção dos próximos meses (recorrências + média dos gastos + ajustes à mão, como 13º e férias); tendência de cada categoria em 12 a 36 meses.
+- **Finanças** — fluxo de caixa mês a mês: renda, gastos, investimentos e saldo; lançamentos com categorias, contas, compras parceladas e competência separada da data; despesas recorrentes; projetos (custos de uma reforma, de um carro, de uma dívida) fora do fluxo mensal; importação de extratos e faturas em CSV/XLSX; tendência de cada categoria em 12 a 36 meses.
 - **Patrimônio** — posições mensais de cada investimento, patrimônio total (investimentos + contas + bens − dívidas), aportes, proventos, e o resultado apurado de cada mês e de cada ano; conciliação mês a mês com os aportes e resgates lançados no Finanças.
 
 Busca global (Ctrl+K) em lançamentos de todos os anos, categorias, investimentos e telas.
@@ -148,7 +148,7 @@ Como as duas seções vivem no mesmo processo, a integração entre elas é cham
 
 ```bash
 npm run dev        # Vite com recarga automática + Electron
-npm test           # 68 testes: núcleo, cálculos, importação, persistência, projeção, conciliação e busca
+npm test           # 66 testes: núcleo, cálculos, importação, persistência, tendência, conciliação e busca
 npm run typecheck  # interface e processo principal
 npm run build      # compila interface (dist/) e processo principal (dist-electron/)
 ```
